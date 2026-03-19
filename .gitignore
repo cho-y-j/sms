@@ -1,0 +1,32 @@
+# Android
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures
+.externalNativeBuild/
+.cxx/
+app/build/
+app/release/
+*.apk
+*.aab
+
+# Server
+server/build/
+server/.gradle/
+
+# Kotlin
+*.class
+*.log
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Secrets
+*.jks
+*.keystore
+google-services.json
+
+# Docker
+postgres_data/

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BizConnect 관리자</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Login Page -->
+<div class="login-container" id="loginPage" style="display:none;">
+    <div class="login-box">
+        <h1>BizConnect</h1>
+        <p class="subtitle">관리자 로그인</p>
+        <div class="form-group">
+            <label>아이디</label>
+            <input type="text" id="loginUsername" placeholder="관리자 아이디" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label>비밀번호</label>
+            <input type="password" id="loginPassword" placeholder="비밀번호" autocomplete="current-password"
+                   onkeyup="if(event.key==='Enter')login()">
+        </div>
+        <button class="btn-login" onclick="login()">로그인</button>
+        <div class="login-error" id="loginError"></div>
+    </div>
+</div>
+
+<!-- App Page -->
+<div class="app-container" id="appPage" style="display:none;">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>BizConnect</h2>
+            <span>관리자 패널</span>
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+                <span class="icon">📊</span><span>대시보드</span>
+            </div>
+            <div class="nav-item" data-page="users" onclick="navigate('users')">
+                <span class="icon">👥</span><span>회원 관리</span>
+            </div>
+            <div class="nav-item" data-page="payments" onclick="navigate('payments')">
+                <span class="icon">💳</span><span>결제 관리</span>
+            </div>
+            <div class="nav-item" data-page="usage" onclick="navigate('usage')">
+                <span class="icon">📈</span><span>사용량 통계</span>
+            </div>
+            <div class="nav-item" data-page="config" onclick="navigate('config')">
+                <span class="icon">⚙️</span><span>설정 관리</span>
+            </div>
+            <div class="nav-item" data-page="ai" onclick="navigate('ai')">
+                <span class="icon">🤖</span><span>AI 설정</span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <button class="btn-logout" onclick="logout()">로그아웃</button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="contentArea">
+        <div class="loading">로딩 중...</div>
+    </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="/admin/admin.js"></script>
+</body>
+</html>

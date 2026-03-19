@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BizConnect</string>
+    <string name="app_label">BizConnect</string>
+
+    <!-- Navigation -->
+    <string name="nav_messages">메시지</string>
+    <string name="nav_contacts">연락처</string>
+    <string name="nav_settings">설정</string>
+
+    <!-- Actions -->
+    <string name="action_send">발송</string>
+    <string name="action_cancel">취소</string>
+    <string name="action_delete">삭제</string>
+    <string name="action_reply">답장</string>
+    <string name="action_approve">승인</string>
+    <string name="action_reject">거절</string>
+    <string name="action_retry">다시 시도</string>
+
+    <!-- Messages -->
+    <string name="msg_default_sms_app">BizConnect를 기본 메시지 앱으로 설정하려면 \'앱 기본값\'에서 설정해주세요.</string>
+    <string name="msg_no_messages">메시지가 없습니다</string>
+    <string name="msg_sending">메시지 발송 중...</string>
+    <string name="msg_sent">메시지 발송됨</string>
+    <string name="msg_failed">메시지 발송 실패</string>
+    <string name="msg_permission_required">이 기능을 사용하려면 권한이 필요합니다</string>
+
+    <!-- Notifications -->
+    <string name="notif_messages">메시지</string>
+    <string name="notif_sms_approval">문자 발송 승인</string>
+    <string name="notif_send_result">발송 알림</string>
+    <string name="notif_callback">콜백 서비스</string>
+    <string name="notif_service">백그라운드 서비스</string>
+</resources>

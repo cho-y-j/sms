@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary Colors -->
+    <color name="primary">#1E88E5</color>
+    <color name="primary_dark">#1565C0</color>
+    <color name="primary_light">#BBDEFB</color>
+
+    <!-- Secondary Colors -->
+    <color name="secondary">#43A047</color>
+    <color name="secondary_dark">#2E7D32</color>
+    <color name="secondary_light">#C8E6C9</color>
+
+    <!-- Tertiary Colors -->
+    <color name="tertiary">#FFB74D</color>
+    <color name="tertiary_dark">#F57C00</color>
+    <color name="tertiary_light">#FFE0B2</color>
+
+    <!-- Accent Colors -->
+    <color name="accent_red">#E53935</color>
+    <color name="accent_green">#43A047</color>
+    <color name="accent_orange">#FB8C00</color>
+
+    <!-- Gray Palette -->
+    <color name="gray_50">#FAFAFA</color>
+    <color name="gray_100">#F5F5F5</color>
+    <color name="gray_200">#EEEEEE</color>
+    <color name="gray_300">#E0E0E0</color>
+    <color name="gray_400">#BDBDBD</color>
+    <color name="gray_500">#9E9E9E</color>
+    <color name="gray_600">#757575</color>
+    <color name="gray_700">#616161</color>
+    <color name="gray_800">#424242</color>
+    <color name="gray_900">#212121</color>
+
+    <!-- Light Mode -->
+    <color name="light_bg">#FAFAFA</color>
+    <color name="light_surface">#FFFFFF</color>
+    <color name="light_text">#212121</color>
+    <color name="light_text_secondary">#757575</color>
+
+    <!-- Dark Mode -->
+    <color name="dark_bg">#121212</color>
+    <color name="dark_surface">#1E1E1E</color>
+    <color name="dark_text">#FFFFFF</color>
+    <color name="dark_text_secondary">#B0B0B0</color>
+
+    <!-- Status Colors -->
+    <color name="status_success">#4CAF50</color>
+    <color name="status_warning">#FF9800</color>
+    <color name="status_error">#F44336</color>
+    <color name="status_info">#2196F3</color>
+</resources>

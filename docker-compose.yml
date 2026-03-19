@@ -1,0 +1,97 @@
+version: '3.9'
+
+services:
+  postgresql:
+    image: postgres:16-alpine
+    container_name: bizconnect-db
+    environment:
+      POSTGRES_USER: bizconnect_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_strong_password}
+      POSTGRES_DB: bizconnect
+      POSTGRES_INITDB_ARGS: "-c shared_preload_libraries=pg_stat_statements"
+    # PostgreSQL accessed internally by bizconnect-api
+    volumes:
+      - bizconnect-db:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - bizconnect-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bizconnect_user -d bizconnect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bizconnect-cache
+    command: redis-server --requirepass ${REDIS_PASSWORD:-change_me_redis_password}
+    # Redis only accessed internally by bizconnect-api
+    volumes:
+      - bizconnect-redis:/data
+    networks:
+      - bizconnect-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bizconnect-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bizconnect-api
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SERVER_PORT: 8080
+      DB_HOST: postgresql
+      DB_PORT: 5432
+      DB_NAME: bizconnect
+      DB_USER: bizconnect_user
+      DB_PASSWORD: ${DB_PASSWORD:-change_me_strong_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me_redis_password}
+      JWT_SECRET: ${JWT_SECRET:-change_me_256_bit_random_secret}
+      JWT_ACCESS_EXPIRY_MINUTES: 15
+      JWT_REFRESH_EXPIRY_DAYS: 7
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change_me_32_bytes_base64}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_SERVICE_ACCOUNT_KEY: ${FIREBASE_SERVICE_ACCOUNT_KEY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.bizconnect.com}
+    ports:
+      - "8090:8080"
+    networks:
+      - bizconnect-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bizconnect-db:
+    driver: local
+  bizconnect-redis:
+    driver: local
+
+networks:
+  bizconnect-network:
+    driver: bridge
