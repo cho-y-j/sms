@@ -51,23 +51,18 @@ class SecurityConfig(
     }
 
     fun configureCORS(application: Application) {
-        val allowedOrigins = System.getenv("ALLOWED_ORIGINS")?.split(",")
-            ?: listOf("https://app.bizconnect.com")
-
         application.install(CORS) {
-            allowedOrigins.forEach { origin ->
-                val trimmed = origin.trim()
-                when {
-                    trimmed.startsWith("https://") -> allowHost(trimmed.removePrefix("https://"), schemes = listOf("https"))
-                    trimmed.startsWith("http://") -> allowHost(trimmed.removePrefix("http://"), schemes = listOf("http"))
-                    else -> allowHost(trimmed)
-                }
-            }
-            allowCredentials = true
+            anyHost()
+            allowCredentials = false
             allowHeader("Content-Type")
             allowHeader("Authorization")
             allowHeader("X-API-Key")
             allowHeader("X-Request-ID")
+            allowMethod(io.ktor.http.HttpMethod.Get)
+            allowMethod(io.ktor.http.HttpMethod.Post)
+            allowMethod(io.ktor.http.HttpMethod.Put)
+            allowMethod(io.ktor.http.HttpMethod.Delete)
+            allowMethod(io.ktor.http.HttpMethod.Options)
             exposedHeaders.add("X-RateLimit-Remaining")
             exposedHeaders.add("X-RateLimit-Reset")
             maxAgeInSeconds = 3600

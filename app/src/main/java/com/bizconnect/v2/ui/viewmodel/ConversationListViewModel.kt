@@ -30,7 +30,8 @@ class ConversationListViewModel @Inject constructor(
     private val messageDao: MessageDao,
     private val contactDao: ContactDao,
     private val categoryDao: CategoryDao,
-    private val smsSyncManager: SmsSyncManager
+    private val smsSyncManager: SmsSyncManager,
+    private val spamEngine: com.bizconnect.v2.domain.engine.SpamEngine
 ) : ViewModel() {
 
     data class UiState(
@@ -220,6 +221,31 @@ class ConversationListViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 conversationDao.markAsRead(threadId)
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
+    fun togglePin(threadId: Long) {
+        viewModelScope.launch {
+            try {
+                val conversation = conversationDao.getByIdSync(threadId)
+                if (conversation?.isPinned == true) {
+                    conversationDao.unpin(threadId)
+                } else {
+                    conversationDao.pin(threadId)
+                }
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
+    fun blockNumber(phone: String) {
+        viewModelScope.launch {
+            try {
+                spamEngine.blockNumber(phone)
             } catch (e: Exception) {
                 _error.value = e.message
             }

@@ -1,6 +1,7 @@
 package com.bizconnect.v2.ui.business
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -49,6 +50,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,11 +65,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.bizconnect.v2.ui.components.AiMessageGenerateDialog
 import com.bizconnect.v2.ui.components.TemplatePickerDialog
+import com.bizconnect.v2.ui.theme.SamsungBlue
 import com.bizconnect.v2.ui.viewmodel.BulkSendViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -81,7 +85,17 @@ fun BulkSendScreen(
     var showTemplatePickerDialog by remember { mutableStateOf(false) }
     var showAiGenerateDialog by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showAdWarning by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    // Ad detection
+    val adKeywords = listOf("할인", "이벤트", "쿠폰", "세일", "프로모션", "특가", "무료체험", "광고", "판매", "구매")
+    val foundKeywords = adKeywords.filter { uiState.messageText.contains(it) }
+    val isAdDetected = foundKeywords.size >= 2
+
+    // Function to proceed with send (show confirm dialog)
+    val proceedWithSend: () -> Unit = { showConfirmDialog = true }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -142,6 +156,65 @@ fun BulkSendScreen(
                 viewModel.sendBulkMessages()
             },
             onDismiss = { showConfirmDialog = false }
+        )
+    }
+
+    // Ad warning dialog
+    if (showAdWarning) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showAdWarning = false },
+            title = { Text("\u26A0\uFE0F 광고성 문자 감지") },
+            text = {
+                Column {
+                    Text("감지된 키워드: ${foundKeywords.joinToString(", ")}")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("광고성 문자를 폰으로 발송하면 통신사 차단 및 과태료 최대 3,000만원이 부과될 수 있습니다.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("안전한 유료 웹 발송을 권장합니다.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                Color(0x20FF0000),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            "(주)다인온은 이용자의 불법 발송에 대한 법적 책임을 지지 않습니다.",
+                            fontSize = 10.sp,
+                            color = Color.Red
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        showAdWarning = false
+                        Toast.makeText(
+                            context,
+                            "유료 발송은 웹(sm.on1.kr/portal)에서 이용하세요",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }) {
+                        Text(
+                            "유료 발송으로 전환",
+                            color = SamsungBlue,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    TextButton(onClick = {
+                        showAdWarning = false
+                        proceedWithSend()
+                    }) {
+                        Text("계속 발송", color = Color.Gray)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdWarning = false }) { Text("취소") }
+            }
         )
     }
 
@@ -471,7 +544,13 @@ fun BulkSendScreen(
                 // Send button
                 // ============================================================
                 Button(
-                    onClick = { showConfirmDialog = true },
+                    onClick = {
+                        if (isAdDetected) {
+                            showAdWarning = true
+                        } else {
+                            proceedWithSend()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -487,6 +566,17 @@ fun BulkSendScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                     Text("발송", color = Color.White)
+                }
+
+                // Ad detection indicator
+                if (isAdDetected) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "\u26A0\uFE0F 광고성 키워드 감지: ${foundKeywords.joinToString(", ")}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFE65100),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))

@@ -26,7 +26,7 @@ import javax.inject.Singleton
 object NetworkModule {
 
     private const val TAG = "NetworkModule"
-    private const val BASE_URL = "https://api.bizconnect.com/"
+    private const val BASE_URL = "https://sm.on1.kr/"
     private const val CONNECT_TIMEOUT_SECONDS = 30L
     private const val READ_TIMEOUT_SECONDS = 30L
     private const val WRITE_TIMEOUT_SECONDS = 30L

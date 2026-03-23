@@ -30,3 +30,12 @@ google-services.json
 
 # Docker
 postgres_data/
+
+# Secrets
+.env
+*.pem
+firebase-service-account.json
+call-93289-firebase-adminsdk-*.json
+sms_proxy.py
+start_proxy.sh
+verify-server-key.pem

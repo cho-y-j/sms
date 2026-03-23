@@ -8,6 +8,7 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.statements.jdbc.JdbcConnectionImpl
 import java.util.UUID
 
 /**
@@ -69,8 +70,32 @@ object DatabaseFactory {
                 CreditBalancesTable,
                 DailyUsageTable,
                 AdminUsersTable,
-                AppConfigTable
+                AdminTemplateCategoriesTable,
+                AdminTemplatesTable,
+                AppConfigTable,
+                NicePaymentsTable,
+                SmsSendJobsTable,
+                PendingSmsTable,
+                UserCategoriesTable,
+                MessageTemplatesTable,
+                UserContactsTable,
+                UserSmsHistoryTable,
+                VerificationCodesTable,
+                ScheduledSmsTable,
+                TrustedDevicesTable
             )
+        }
+
+        // Migration: add wideshot_send_code column if missing
+        transaction {
+            try {
+                val conn = (this.connection as JdbcConnectionImpl).connection
+                val rs = conn.metaData.getColumns(null, null, "sms_logs", "wideshot_send_code")
+                if (!rs.next()) {
+                    exec("ALTER TABLE sms_logs ADD COLUMN wideshot_send_code VARCHAR(50) DEFAULT NULL")
+                }
+                rs.close()
+            } catch (_: Exception) { /* column already exists or table not yet created */ }
         }
 
         // Create default admin if not exists
@@ -97,7 +122,7 @@ object DatabaseFactory {
                 Triple("lms_cost", "29.0", "장문 단가(원)"),
                 Triple("mms_cost", "63.0", "MMS 단가(원)"),
                 Triple("free_daily_limit", "50", "무료 일일 한도"),
-                Triple("paid_daily_limit", "150", "유료 일일 한도"),
+                Triple("paid_daily_limit", "149", "유료 일일 한도 (통신사 차단 방지)"),
                 Triple("monthly_subscription_price", "4900", "월 구독료(원)")
             )
             for ((key, value, desc) in configs) {

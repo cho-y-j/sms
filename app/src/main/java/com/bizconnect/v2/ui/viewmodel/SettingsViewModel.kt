@@ -18,7 +18,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val appPreferences: com.bizconnect.v2.data.preferences.AppPreferences
 ) : ViewModel() {
 
     data class UiState(
@@ -103,4 +104,22 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
+    fun logout() {
+        viewModelScope.launch {
+            appPreferences.clearAuth()
+        }
+    }
+
+    fun isLoggedIn(): Boolean = appPreferences.isLoggedIn()
+
+    fun getUserName(): String = appPreferences.getUserId()?.let {
+        if (it.startsWith("offline_")) "오프라인" else it.take(8) + "..."
+    } ?: "알 수 없음"
+
+    fun getUserTier(): String = appPreferences.getSubscriptionTier()
+
+    fun getUserRole(): String = appPreferences.getUserRole()
+
+    fun getAccessToken(): String? = appPreferences.getAccessToken()
 }

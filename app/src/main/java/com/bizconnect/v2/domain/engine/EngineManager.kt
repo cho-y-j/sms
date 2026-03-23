@@ -301,8 +301,8 @@ class MessageBuilder {
         require(!body.isNullOrBlank()) { "Body is required" }
 
         return BulkMessageData(
-            address = address!!,
-            body = body!!,
+            address = requireNotNull(address) { "Address is required" },
+            body = requireNotNull(body) { "Body is required" },
             imageUri = imageUri,
             metadata = mapOf(
                 "templateMode" to templateMode.toString()

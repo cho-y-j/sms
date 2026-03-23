@@ -1,5 +1,7 @@
 package com.bizconnect.v2.service
 
+import android.os.Build
+import android.telephony.SmsManager
 import android.util.Log
 import com.bizconnect.v2.data.local.db.dao.TaskDao
 import com.bizconnect.v2.data.local.db.entity.TaskEntity
@@ -12,7 +14,15 @@ import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 
 /**
@@ -26,8 +36,12 @@ class BizConnectFcmService : FirebaseMessagingService() {
         private const val TAG = "BizConnectFcmService"
         private const val TYPE_SEND_SMS = "send_sms"
         private const val TYPE_SEND_SMS_BATCH = "send_sms_batch"
+        private const val TYPE_WEB_SMS_BATCH = "web_sms_batch"
         private const val TYPE_SETTING_UPDATE = "setting_update"
         private const val TYPE_SYNC_REQUEST = "sync_request"
+
+        private const val SERVER_BASE_URL = "https://sm.on1.kr"
+        private const val SMS_SEND_DELAY_MS = 3000L  // 3초 간격 (20/min throttle)
     }
 
     @Inject
@@ -43,6 +57,11 @@ class BizConnectFcmService : FirebaseMessagingService() {
     lateinit var api: BizConnectApi
 
     private val scope = CoroutineScope(Dispatchers.Default)
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
+    }
 
     /**
      * Called when FCM token is generated or refreshed.
@@ -79,6 +98,7 @@ class BizConnectFcmService : FirebaseMessagingService() {
             when (messageType) {
                 TYPE_SEND_SMS -> handleSingleSmsRequest(message.data)
                 TYPE_SEND_SMS_BATCH -> handleBatchSmsRequest(message.data)
+                TYPE_WEB_SMS_BATCH -> handleWebSmsBatch(message.data)
                 TYPE_SETTING_UPDATE -> handleSettingUpdate(message.data)
                 TYPE_SYNC_REQUEST -> handleSyncRequest()
                 else -> Log.w(TAG, "Unknown message type: $messageType")
@@ -233,6 +253,189 @@ class BizConnectFcmService : FirebaseMessagingService() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle sync request", e)
             }
+        }
+    }
+
+    /**
+     * Handles web-originated SMS batch sending.
+     * Fetches pending messages from server, sends each via SmsManager,
+     * and reports status back to server after each send.
+     */
+    private fun handleWebSmsBatch(data: Map<String, String>) {
+        scope.launch {
+            val jobId = data["jobId"]
+            val count = data["count"]?.toIntOrNull() ?: 0
+
+            if (jobId.isNullOrEmpty()) {
+                Log.e(TAG, "web_sms_batch: missing jobId")
+                return@launch
+            }
+
+            Log.d(TAG, "web_sms_batch: jobId=$jobId, expected count=$count")
+
+            val token = appPreferences.getAccessToken()
+            if (token.isNullOrEmpty()) {
+                Log.e(TAG, "web_sms_batch: no access token available")
+                return@launch
+            }
+
+            val client = OkHttpClient.Builder()
+                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+
+            try {
+                // Step 1: Fetch pending messages from server
+                val pendingMessages = fetchPendingMessages(client, token, jobId)
+                if (pendingMessages.isEmpty()) {
+                    Log.w(TAG, "web_sms_batch: no pending messages for jobId=$jobId")
+                    return@launch
+                }
+
+                Log.d(TAG, "web_sms_batch: fetched ${pendingMessages.size} pending messages")
+
+                val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    applicationContext.getSystemService(SmsManager::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    SmsManager.getDefault()
+                }
+
+                // Step 2: Send each message with 3-second delay
+                for ((index, msg) in pendingMessages.withIndex()) {
+                    val msgId = msg.getString("id")
+                    val phone = msg.getString("phone")
+                    val body = msg.getString("message")
+
+                    if (phone.isBlank() || body.isBlank()) {
+                        Log.w(TAG, "web_sms_batch: skipping message $msgId - empty phone or body")
+                        reportSmsStatus(client, token, msgId, "failed", "Empty phone number or message body")
+                        continue
+                    }
+
+                    // Add delay between messages (skip delay for the first one)
+                    if (index > 0) {
+                        delay(SMS_SEND_DELAY_MS)
+                    }
+
+                    try {
+                        // Split long messages and send
+                        val parts = smsManager.divideMessage(body)
+                        if (parts.size == 1) {
+                            smsManager.sendTextMessage(phone, null, body, null, null)
+                        } else {
+                            smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                        }
+
+                        Log.d(TAG, "web_sms_batch: sent SMS ${index + 1}/${pendingMessages.size} to $phone (id=$msgId)")
+                        reportSmsStatus(client, token, msgId, "sent", null)
+                    } catch (e: Exception) {
+                        val errorMsg = e.message ?: "Unknown send error"
+                        Log.e(TAG, "web_sms_batch: failed to send SMS to $phone (id=$msgId)", e)
+                        reportSmsStatus(client, token, msgId, "failed", errorMsg)
+                    }
+                }
+
+                Log.d(TAG, "web_sms_batch: completed jobId=$jobId")
+            } catch (e: Exception) {
+                Log.e(TAG, "web_sms_batch: fatal error processing jobId=$jobId", e)
+            } finally {
+                client.dispatcher.executorService.shutdown()
+            }
+        }
+    }
+
+    /**
+     * Fetches pending SMS messages from server for a given job.
+     * GET /api/user/sms/pending?jobId={jobId}
+     */
+    private fun fetchPendingMessages(
+        client: OkHttpClient,
+        token: String,
+        jobId: String
+    ): List<JSONObject> {
+        val request = Request.Builder()
+            .url("$SERVER_BASE_URL/api/user/sms/pending?jobId=$jobId")
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+
+        val response = client.newCall(request).execute()
+        return response.use { resp ->
+            if (!resp.isSuccessful) {
+                Log.e(TAG, "fetchPendingMessages: HTTP ${resp.code} for jobId=$jobId")
+                return emptyList()
+            }
+
+            val bodyStr = resp.body?.string()
+            if (bodyStr.isNullOrEmpty()) {
+                Log.e(TAG, "fetchPendingMessages: empty response body for jobId=$jobId")
+                return emptyList()
+            }
+
+            try {
+                val jsonArray = JSONArray(bodyStr)
+                val messages = mutableListOf<JSONObject>()
+                for (i in 0 until jsonArray.length()) {
+                    messages.add(jsonArray.getJSONObject(i))
+                }
+                messages
+            } catch (e: Exception) {
+                // Try parsing as object with "data" or "messages" key
+                try {
+                    val jsonObj = JSONObject(bodyStr)
+                    val jsonArray = if (jsonObj.has("data")) jsonObj.getJSONArray("data")
+                        else jsonObj.getJSONArray("messages")
+                    val messages = mutableListOf<JSONObject>()
+                    for (i in 0 until jsonArray.length()) {
+                        messages.add(jsonArray.getJSONObject(i))
+                    }
+                    messages
+                } catch (e2: Exception) {
+                    Log.e(TAG, "fetchPendingMessages: failed to parse response", e2)
+                    emptyList()
+                }
+            }
+        }
+    }
+
+    /**
+     * Reports SMS send status back to server.
+     * PUT /api/user/sms/{id}/status
+     */
+    private fun reportSmsStatus(
+        client: OkHttpClient,
+        token: String,
+        messageId: String,
+        status: String,
+        error: String?
+    ) {
+        try {
+            val json = JSONObject().apply {
+                put("status", status)
+                if (error != null) {
+                    put("error", error)
+                }
+            }
+
+            val requestBody = json.toString()
+                .toRequestBody("application/json".toMediaType())
+
+            val request = Request.Builder()
+                .url("$SERVER_BASE_URL/api/user/sms/$messageId/status")
+                .header("Authorization", "Bearer $token")
+                .put(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    Log.w(TAG, "reportSmsStatus: HTTP ${resp.code} for id=$messageId")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "reportSmsStatus: failed for id=$messageId", e)
         }
     }
 

@@ -121,21 +121,16 @@ fun AiSettingsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // === Section 3: API 키 설정 ===
-                AiSectionHeader("API 키 설정")
+                // === Section 3: AI 사용량 ===
+                AiSectionHeader("AI 사용량")
 
-                ApiKeyField(
-                    label = "DeepSeek API 키",
-                    value = state.deepSeekApiKey,
-                    onValueChange = { viewModel.updateDeepSeekApiKey(it) }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                ApiKeyField(
-                    label = "APick API 키",
-                    value = state.apickApiKey,
-                    onValueChange = { viewModel.updateApickApiKey(it) }
+                val aiUsage = state.aiUsageToday
+                val aiLimit = state.aiDailyLimit
+                val aiLimitText = if (aiLimit == Int.MAX_VALUE) "무제한" else "${aiLimit}건"
+                Text(
+                    text = "오늘 사용: ${aiUsage}건 / $aiLimitText",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

@@ -19,7 +19,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -63,7 +67,10 @@ fun ConversationListScreen(
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var showCategorySheet by remember { mutableStateOf(false) }
     var selectedConversationPhone by remember { mutableStateOf("") }
+    var selectedConversationThreadId by remember { mutableStateOf(0L) }
     var selectedContactCategories by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showBlockConfirm by remember { mutableStateOf(false) }
 
     // Trigger sync when permissions are granted
     androidx.compose.runtime.LaunchedEffect(permissionsGranted) {
@@ -161,6 +168,7 @@ fun ConversationListScreen(
                             ),
                             onClick = { onConversationClick(conversation.threadId) },
                             onLongClick = {
+                                selectedConversationThreadId = conversation.threadId
                                 viewModel.getRecipientAddress(conversation.threadId) { phone ->
                                     selectedConversationPhone = phone
                                     viewModel.getCategoriesForContact(phone) { cats ->
@@ -176,59 +184,178 @@ fun ConversationListScreen(
         }
     }
 
-    // Category change bottom sheet
-    if (showCategorySheet && uiState.categories.isNotEmpty()) {
+    // Long press bottom sheet - 액션 + 카테고리
+    if (showCategorySheet) {
+        val isPinned = uiState.conversations.find { it.threadId == selectedConversationThreadId }?.isPinned == true
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showCategorySheet = false }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
             ) {
-                Text(
-                    "카테고리 설정",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                uiState.categories.forEach { category ->
-                    val isInCategory = selectedContactCategories.contains(category.id)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                viewModel.toggleContactCategory(
-                                    selectedConversationPhone, category.id, isInCategory
-                                )
-                                selectedContactCategories = if (isInCategory) {
-                                    selectedContactCategories - category.id
-                                } else {
-                                    selectedContactCategories + category.id
+                // 액션 버튼들
+                // 상단 고정
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.togglePin(selectedConversationThreadId)
+                            showCategorySheet = false
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (isPinned) Icons.Filled.PushPin
+                        else Icons.Outlined.PushPin,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        if (isPinned) "상단 고정 해제" else "상단 고정",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+
+                // 차단
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            showCategorySheet = false
+                            showBlockConfirm = true
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Block,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("차단", style = MaterialTheme.typography.bodyLarge)
+                }
+
+                // 삭제
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            showCategorySheet = false
+                            showDeleteConfirm = true
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("삭제", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                }
+
+                // 구분선
+                if (uiState.categories.isNotEmpty()) {
+                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Text(
+                        "카테고리 설정",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    uiState.categories.forEach { category ->
+                        val isInCategory = selectedContactCategories.contains(category.id)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.toggleContactCategory(
+                                        selectedConversationPhone, category.id, isInCategory
+                                    )
+                                    selectedContactCategories = if (isInCategory) {
+                                        selectedContactCategories - category.id
+                                    } else {
+                                        selectedContactCategories + category.id
+                                    }
                                 }
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.material3.Checkbox(
-                            checked = isInCategory,
-                            onCheckedChange = {
-                                viewModel.toggleContactCategory(
-                                    selectedConversationPhone, category.id, isInCategory
-                                )
-                                selectedContactCategories = if (isInCategory) {
-                                    selectedContactCategories - category.id
-                                } else {
-                                    selectedContactCategories + category.id
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.Checkbox(
+                                checked = isInCategory,
+                                onCheckedChange = {
+                                    viewModel.toggleContactCategory(
+                                        selectedConversationPhone, category.id, isInCategory
+                                    )
+                                    selectedContactCategories = if (isInCategory) {
+                                        selectedContactCategories - category.id
+                                    } else {
+                                        selectedContactCategories + category.id
+                                    }
                                 }
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(category.name, style = MaterialTheme.typography.bodyLarge)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(category.name, style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    // 삭제 확인 다이얼로그
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("대화 삭제") },
+            text = { Text("이 대화의 모든 메시지가 삭제됩니다. 삭제하시겠습니까?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteConversation(selectedConversationThreadId)
+                    showDeleteConfirm = false
+                }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    // 차단 확인 다이얼로그
+    if (showBlockConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBlockConfirm = false },
+            title = { Text("번호 차단") },
+            text = { Text("$selectedConversationPhone 번호를 차단하시겠습니까?\n차단된 번호의 문자는 수신되지 않습니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.blockNumber(selectedConversationPhone)
+                    showBlockConfirm = false
+                }) {
+                    Text("차단", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockConfirm = false }) {
+                    Text("취소")
+                }
+            }
+        )
     }
 
     // Add category dialog

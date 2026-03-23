@@ -2,14 +2,18 @@ package com.bizconnect.v2.ui.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.local.db.dao.MessageTemplateDao
 import com.bizconnect.v2.data.local.db.entity.MessageTemplateEntity
+import com.bizconnect.v2.data.preferences.AppPreferences
 import com.bizconnect.v2.domain.engine.TemplateEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,14 +22,71 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import javax.inject.Inject
+
+data class AdminTemplate(
+    val id: String,
+    val title: String,
+    val content: String,
+    val categoryName: String,
+    val categoryIcon: String
+)
 
 @HiltViewModel
 class MessageTemplateViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val messageTemplateDao: MessageTemplateDao,
-    private val templateEngine: TemplateEngine
+    private val templateEngine: TemplateEngine,
+    private val appPreferences: AppPreferences
 ) : ViewModel() {
+
+    val adminTemplates = mutableStateOf<List<AdminTemplate>>(emptyList())
+
+    init {
+        fetchAdminTemplates()
+    }
+
+    fun fetchAdminTemplates() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val token = appPreferences.getAccessToken() ?: return@launch
+                val client = OkHttpClient()
+                val request = Request.Builder()
+                    .url("https://sm.on1.kr/api/user/admin-templates")
+                    .addHeader("Authorization", "Bearer $token")
+                    .get().build()
+                val resp = client.newCall(request).execute()
+                val body = resp.body?.string() ?: ""
+                resp.close()
+
+                val json = JSONObject(body)
+                val data = json.optJSONArray("data") ?: return@launch
+                val result = mutableListOf<AdminTemplate>()
+                for (i in 0 until data.length()) {
+                    val cat = data.getJSONObject(i)
+                    val catName = cat.optString("name", "")
+                    val catIcon = cat.optString("icon", "\uD83D\uDCCB")
+                    val templates = cat.optJSONArray("templates") ?: continue
+                    for (j in 0 until templates.length()) {
+                        val tpl = templates.getJSONObject(j)
+                        result.add(AdminTemplate(
+                            id = tpl.optString("id"),
+                            title = tpl.optString("title"),
+                            content = tpl.optString("content"),
+                            categoryName = catName,
+                            categoryIcon = catIcon
+                        ))
+                    }
+                }
+                adminTemplates.value = result
+            } catch (e: Exception) {
+                Log.e("Templates", "Failed to fetch admin templates", e)
+            }
+        }
+    }
 
     private val _selectedCategory = MutableStateFlow<String?>(null)
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()

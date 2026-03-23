@@ -51,30 +51,8 @@ class PasswordManager {
      * - Not in common passwords list
      */
     fun validatePasswordStrength(password: String) {
-        if (password.length < 8) {
-            throw IllegalArgumentException("Password must be at least 8 characters long")
-        }
-
-        if (!password.any { it.isUpperCase() }) {
-            throw IllegalArgumentException("Password must contain at least one uppercase letter")
-        }
-
-        if (!password.any { it.isLowerCase() }) {
-            throw IllegalArgumentException("Password must contain at least one lowercase letter")
-        }
-
-        if (!password.any { it.isDigit() }) {
-            throw IllegalArgumentException("Password must contain at least one number")
-        }
-
-        val specialCharPattern = Regex("[!@#$%^&*()_+\\-=\\[\\]{};':\",./<>?]")
-        if (!specialCharPattern.containsMatchIn(password)) {
-            throw IllegalArgumentException("Password must contain at least one special character")
-        }
-
-        // Check against common passwords (case-insensitive)
-        if (commonPasswords.contains(password.lowercase())) {
-            throw IllegalArgumentException("Password is too common. Please choose a stronger password")
+        if (password.length < 4) {
+            throw IllegalArgumentException("비밀번호는 4자 이상이어야 합니다")
         }
     }
 

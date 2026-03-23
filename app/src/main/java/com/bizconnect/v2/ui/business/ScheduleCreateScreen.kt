@@ -237,7 +237,7 @@ fun ScheduleCreateScreen(
             // === 이미지 첨부 ===
             if (!uiState.imageUri.isNullOrBlank()) {
                 Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                    val imgUri = uiState.imageUri!!
+                    val imgUri = uiState.imageUri ?: ""
                     AsyncImage(
                         model = if (imgUri.startsWith("/")) Uri.fromFile(java.io.File(imgUri)) else Uri.parse(imgUri),
                         contentDescription = "첨부 이미지",

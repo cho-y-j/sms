@@ -230,7 +230,7 @@ fun RecipientSelectionScreen(
                                 selected = selectedCategoryId == category.id,
                                 onClick = {
                                     selectedCategoryId = if (selectedCategoryId == category.id) null else category.id
-                                    if (selectedCategoryId != null) viewModel.loadCategoryContacts(selectedCategoryId!!)
+                                    selectedCategoryId?.let { viewModel.loadCategoryContacts(it) }
                                 },
                                 label = { Text(category.name) }
                             )

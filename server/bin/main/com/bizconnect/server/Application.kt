@@ -6,6 +6,12 @@ import com.bizconnect.server.routes.taskRoutes
 import com.bizconnect.server.routes.smsRoutes
 import com.bizconnect.server.routes.adminRoutes
 import com.bizconnect.server.routes.subscriptionRoutes
+import com.bizconnect.server.routes.paymentRoutes
+import com.bizconnect.server.routes.smsApiRoutes
+import com.bizconnect.server.routes.userPortalRoutes
+import com.bizconnect.server.services.NicePayService
+import com.bizconnect.server.services.PhoneVerificationService
+import com.bizconnect.server.services.WideshotSmsService
 import com.bizconnect.server.security.*
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -19,6 +25,7 @@ import io.ktor.server.routing.routing
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondFile
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
 import io.ktor.serialization.kotlinx.json.json
@@ -50,6 +57,9 @@ fun Application.bizConnectModule() {
     val ipManager = IpManager()
     val rateLimiter = RateLimiter(ipManager)
     val auditLogger = AuditLogger()
+    val nicePayService = NicePayService()
+    val wideshotSmsService = WideshotSmsService()
+    val phoneVerificationService = PhoneVerificationService(wideshotSmsService)
     val securityConfig = SecurityConfig(jwtManager, ipManager, rateLimiter, auditLogger)
 
     // Install plugins
@@ -67,6 +77,26 @@ fun Application.bizConnectModule() {
 
     // Routes
     routing {
+        // Landing page
+        get("/") {
+            val html = Thread.currentThread().contextClassLoader.getResource("landing/index.html")?.readText()
+            if (html != null) call.respondText(html, ContentType.Text.Html)
+            else call.respondText("BizConnect - Business SMS Platform", ContentType.Text.Plain)
+        }
+        get("/landing/{file}") {
+            val fileName = call.parameters["file"] ?: ""
+            val ct = when {
+                fileName.endsWith(".css") -> ContentType.Text.CSS
+                fileName.endsWith(".js") -> ContentType.Text.JavaScript
+                fileName.endsWith(".png") -> ContentType.Image.PNG
+                fileName.endsWith(".svg") -> ContentType.Image.SVG
+                else -> ContentType.Text.Plain
+            }
+            val content = Thread.currentThread().contextClassLoader.getResource("landing/$fileName")?.readText()
+            if (content != null) call.respondText(content, ct)
+            else call.respond(HttpStatusCode.NotFound)
+        }
+
         // Health check (no auth required)
         get("/health") {
             call.respond(
@@ -80,16 +110,72 @@ fun Application.bizConnectModule() {
         }
 
         // Public auth routes
-        authRoutes(jwtManager, passwordManager, rateLimiter, auditLogger, apiKeyManager)
+        authRoutes(jwtManager, passwordManager, rateLimiter, auditLogger, apiKeyManager, phoneVerificationService)
 
         // Admin routes (public login, then protected endpoints)
         adminRoutes(jwtManager, passwordManager)
 
-        // Admin web panel (static files)
-        get("/admin") {
+        // Payment routes (public approve callback, protected prepare/cancel)
+        paymentRoutes(nicePayService)
+
+        // 이미지 업로드 파일 서빙
+        get("/uploads/{file}") {
+            val fileName = call.parameters["file"] ?: ""
+            val file = java.io.File("/app/uploads/$fileName")
+            if (file.exists()) {
+                call.respondFile(file)
+            } else {
+                call.respond(HttpStatusCode.NotFound, "File not found")
+            }
+        }
+
+        // 이미지 미리보기 (OG 태그 포함)
+        get("/i/{file}") {
+            val fileName = call.parameters["file"] ?: ""
+            val imageUrl = "https://sm.on1.kr/uploads/$fileName"
+            val html = """<!DOCTYPE html><html><head>
+                <meta charset="UTF-8"><meta property="og:title" content="BizConnect">
+                <meta property="og:image" content="$imageUrl"><meta property="og:type" content="website">
+                <meta name="viewport" content="width=device-width,initial-scale=1">
+                <style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;}img{max-width:100%;max-height:100vh;}</style>
+                </head><body><img src="$imageUrl"></body></html>""".trimIndent()
+            call.respondText(html, ContentType.Text.Html)
+        }
+
+        // 개인정보처리방침
+        get("/privacy") {
+            val html = Thread.currentThread().contextClassLoader.getResource("privacy/index.html")?.readText()
+            if (html != null) call.respondText(html, ContentType.Text.Html)
+            else call.respond(HttpStatusCode.NotFound, "Not found")
+        }
+
+        // User web portal (static files)
+        get("/portal") {
+            val html = Thread.currentThread().contextClassLoader.getResource("portal/index.html")?.readText()
+            if (html != null) call.respondText(html, ContentType.Text.Html)
+            else call.respond(HttpStatusCode.NotFound, "Portal not found")
+        }
+        get("/portal/{file}") {
+            val fileName = call.parameters["file"] ?: ""
+            val ct = when {
+                fileName.endsWith(".css") -> ContentType.Text.CSS
+                fileName.endsWith(".js") -> ContentType.Text.JavaScript
+                else -> ContentType.Text.Plain
+            }
+            val content = Thread.currentThread().contextClassLoader.getResource("portal/$fileName")?.readText()
+            if (content != null) call.respondText(content, ct)
+            else call.respond(HttpStatusCode.NotFound)
+        }
+
+        // Admin web panel (추측 불가 경로)
+        get("/mgmt-dainon") {
             val html = Thread.currentThread().contextClassLoader.getResource("admin/index.html")?.readText()
             if (html != null) call.respondText(html, ContentType.Text.Html)
-            else call.respond(HttpStatusCode.NotFound, "Admin panel not found")
+            else call.respond(HttpStatusCode.NotFound, "Not found")
+        }
+        // 기존 /admin 경로는 404
+        get("/admin") {
+            call.respond(HttpStatusCode.NotFound, "Not found")
         }
         get("/admin/{file}") {
             val fileName = call.parameters["file"] ?: ""
@@ -108,6 +194,8 @@ fun Application.bizConnectModule() {
             taskRoutes()
             smsRoutes(rateLimiter, auditLogger)
             subscriptionRoutes()
+            smsApiRoutes(wideshotSmsService)
+            userPortalRoutes(wideshotSmsService)
         }
     }
 

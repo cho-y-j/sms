@@ -56,6 +56,9 @@ dependencies {
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.coroutines.core)
 
+    // AWS S3 (향후 전환 시 활성화)
+    // implementation("software.amazon.awssdk:s3:2.21.0")
+
     // Logging
     implementation(libs.slf4j.api)
     implementation(libs.logback)

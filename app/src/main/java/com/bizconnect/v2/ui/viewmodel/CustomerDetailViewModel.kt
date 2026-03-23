@@ -118,7 +118,7 @@ class CustomerDetailViewModel @Inject constructor(
 
                 val customer = if (state.existingCustomerId != null) {
                     // Update existing
-                    val existing = customerDao.getByPhone(phone)!!
+                    val existing = customerDao.getByPhone(phone) ?: return@launch
                     existing.copy(
                         birthday = state.birthday.ifBlank { null },
                         anniversary = state.anniversary.ifBlank { null },

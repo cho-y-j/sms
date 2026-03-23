@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.preferences.AppPreferences
 import com.bizconnect.v2.data.remote.auth.AuthApiService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import okhttp3.MediaType.Companion.toMediaType
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -53,6 +54,8 @@ class AuthViewModel @Inject constructor(
                     result.userId?.let { appPreferences.setUserId(it) }
                     isLoggedIn = true
                     isOfflineMode = result.offline
+                    uploadFcmToken()
+                    fetchServerConfig()
                     onSuccess()
                 } else {
                     error = result.error ?: "로그인에 실패했습니다"
@@ -89,8 +92,8 @@ class AuthViewModel @Inject constructor(
             error = "비밀번호를 입력해주세요"
             return
         }
-        if (password.length < 6) {
-            error = "비밀번호는 6자 이상이어야 합니다"
+        if (password.length < 4) {
+            error = "비밀번호는 4자 이상이어야 합니다"
             return
         }
         if (password != passwordConfirm) {
@@ -124,5 +127,57 @@ class AuthViewModel @Inject constructor(
         appPreferences.logout()
         isLoggedIn = false
         isOfflineMode = false
+    }
+
+    private fun uploadFcmToken() {
+        viewModelScope.launch {
+            try {
+                val fcmToken = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                appPreferences.saveFcmToken(fcmToken)
+                val accessToken = appPreferences.getAccessToken() ?: return@launch
+                val client = okhttp3.OkHttpClient()
+                val body = org.json.JSONObject().put("token", fcmToken).toString()
+                val request = okhttp3.Request.Builder()
+                    .url("https://sm.on1.kr/api/fcm/token")
+                    .addHeader("Authorization", "Bearer $accessToken")
+                    .put(okhttp3.RequestBody.create("application/json".toMediaType(), body))
+                    .build()
+                client.newCall(request).execute().close()
+            } catch (_: Exception) { }
+        }
+    }
+
+    /**
+     * 서버에서 AI API 키 등 설정을 받아와 로컬에 저장
+     */
+    private fun fetchServerConfig() {
+        viewModelScope.launch {
+            try {
+                val config = authApiService.fetchConfig()
+                config["deepseek_api_key"]?.let { key ->
+                    if (key.isNotBlank()) appPreferences.setDeepSeekApiKey(key)
+                }
+                // role도 저장
+                val accessToken = appPreferences.getAccessToken() ?: return@launch
+                val client = okhttp3.OkHttpClient()
+                val request = okhttp3.Request.Builder()
+                    .url("https://sm.on1.kr/api/user/me")
+                    .addHeader("Authorization", "Bearer $accessToken")
+                    .get().build()
+                val resp = client.newCall(request).execute()
+                val body = resp.body?.string() ?: ""
+                resp.close()
+                val json = org.json.JSONObject(body)
+                json.optString("role", "user").let { appPreferences.setUserRole(it) }
+                json.optString("tier", "free").let { appPreferences.setSubscriptionTier(it) }
+            } catch (_: Exception) { }
+        }
+    }
+
+    private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T {
+        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            addOnSuccessListener { cont.resume(it, null) }
+            addOnFailureListener { cont.resume(null as T, null) }
+        }
     }
 }

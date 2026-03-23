@@ -274,11 +274,13 @@ class CallbackEngine @Inject constructor(
 
                 // 2. Fallback: business card image
                 if (imageUri == null && setting.businessCardEnabled && setting.businessCardImageUrl != null) {
-                    val cardPath = setting.businessCardImageUrl!!
-                    imageUri = if (cardPath.startsWith("/")) {
-                        Uri.fromFile(java.io.File(cardPath))
-                    } else {
-                        Uri.parse(cardPath)
+                    val cardPath = setting.businessCardImageUrl ?: ""
+                    if (cardPath.isNotBlank()) {
+                        imageUri = if (cardPath.startsWith("/")) {
+                            Uri.fromFile(java.io.File(cardPath))
+                        } else {
+                            Uri.parse(cardPath)
+                        }
                     }
                 }
 

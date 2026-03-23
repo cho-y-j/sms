@@ -64,6 +64,7 @@ import coil.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bizconnect.v2.ui.components.AvatarView
+import com.bizconnect.v2.ui.message.AttachmentPicker
 import com.bizconnect.v2.ui.theme.SamsungBlue
 import com.bizconnect.v2.ui.viewmodel.ComposeMessageViewModel
 
@@ -80,6 +81,8 @@ fun ComposeMessageScreen(
     var showSearchDialog by remember { mutableStateOf(false) }
     var showPhoneDialog by remember { mutableStateOf(false) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var showAttachmentPicker by remember { mutableStateOf(false) }
+    var showTemplatePicker by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -250,9 +253,7 @@ fun ComposeMessageScreen(
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-                IconButton(onClick = {
-                    galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }) {
+                IconButton(onClick = { showAttachmentPicker = true }) {
                     Icon(Icons.Default.AttachFile, contentDescription = "첨부", tint = SamsungBlue)
                 }
 
@@ -288,7 +289,7 @@ fun ComposeMessageScreen(
                 if (canSend) {
                     IconButton(onClick = {
                         if (selectedImageUri != null) {
-                            viewModel.sendMmsWithImage(uiState.messageText, selectedImageUri!!)
+                            viewModel.sendMmsWithImage(uiState.messageText, selectedImageUri ?: return@IconButton)
                             selectedImageUri = null
                         } else {
                             viewModel.sendMessage()
@@ -348,6 +349,65 @@ fun ComposeMessageScreen(
             confirmButton = {
                 TextButton(onClick = { showSearchDialog = false }) { Text("닫기") }
             }
+        )
+    }
+
+    // === AttachmentPicker bottom sheet ===
+    AttachmentPicker(
+        isVisible = showAttachmentPicker,
+        onDismiss = { showAttachmentPicker = false },
+        onGallery = {
+            galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onCamera = {
+            // Camera not yet wired for ComposeMessageScreen — fall back to gallery
+            galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onFile = {
+            // File picker not yet wired — fall back to gallery
+            galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onContact = {
+            // Share own contact as text
+            try {
+                val tm = context.getSystemService(android.telephony.TelephonyManager::class.java)
+                @Suppress("MissingPermission", "DEPRECATION")
+                val myNumber = tm?.line1Number ?: ""
+                val profileCursor = context.contentResolver.query(
+                    android.provider.ContactsContract.Profile.CONTENT_URI,
+                    arrayOf(android.provider.ContactsContract.Profile.DISPLAY_NAME),
+                    null, null, null
+                )
+                val myName = profileCursor?.use {
+                    if (it.moveToFirst()) it.getString(0) else null
+                } ?: "내 연락처"
+
+                val vCard = """
+BEGIN:VCARD
+VERSION:3.0
+FN:$myName
+TEL:$myNumber
+END:VCARD
+                """.trimIndent()
+                viewModel.updateMessage(uiState.messageText + vCard)
+            } catch (_: Exception) { }
+        },
+        onLocation = {
+            // Location sharing stub — append placeholder
+            viewModel.updateMessage(uiState.messageText + "[위치 공유]")
+        },
+        onTemplate = { showTemplatePicker = true }
+    )
+
+    // === Template picker dialog ===
+    if (showTemplatePicker) {
+        com.bizconnect.v2.ui.components.TemplatePickerDialog(
+            onDismiss = { showTemplatePicker = false },
+            onTemplateSelected = { template ->
+                viewModel.updateMessage(template.content)
+                showTemplatePicker = false
+            },
+            onCreateNew = { /* 인라인 생성 폼이 다이얼로그 안에서 처리됨 */ }
         )
     }
 

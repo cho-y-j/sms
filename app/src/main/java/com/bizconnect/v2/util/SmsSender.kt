@@ -44,25 +44,93 @@ class SmsSender @Inject constructor(
     private val TAG = "SmsSender"
 
     /**
+     * 전체 폰 SMS 발송 카운트 (우리 앱 + 다른 앱 포함)
+     * 통신사에서 일 150건 초과 시 차단할 수 있으므로 전체 카운트 필요
+     */
+    private fun getTodayTotalSmsCount(): Int {
+        try {
+            val today = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
+
+            val cursor = context.contentResolver.query(
+                Uri.parse("content://sms/sent"),
+                arrayOf("_id"),
+                "date >= ?",
+                arrayOf(today.toString()),
+                null
+            )
+            val count = cursor?.count ?: 0
+            cursor?.close()
+            return count
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to count total SMS: ${e.message}")
+            return 0
+        }
+    }
+
+    /**
+     * 오늘 고유 수신자 수 (2000명 초과 시 통신사 차단 방지)
+     */
+    private fun getTodayUniqueRecipientCount(): Int {
+        try {
+            val today = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
+
+            val cursor = context.contentResolver.query(
+                Uri.parse("content://sms/sent"),
+                arrayOf("DISTINCT address"),
+                "date >= ?",
+                arrayOf(today.toString()),
+                null
+            )
+            val count = cursor?.count ?: 0
+            cursor?.close()
+            return count
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to count unique recipients: ${e.message}")
+            return 0
+        }
+    }
+
+    /**
      * Check daily limit and increment count.
+     * 전체 폰 SMS 카운트 기반 (우리 앱 + 다른 앱 포함)
      * Returns true if allowed, false if limit reached.
      */
     private suspend fun checkAndIncrementDailyLimit(): Boolean {
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.KOREA).format(java.util.Date())
         val userId = appPreferences.getUserId() ?: "default"
-        val currentCount = dailyLimitDao.getSentCount(userId, today) ?: 0
-        val limit = if (appPreferences.getSubscriptionTier() == "paid") {
-            appPreferences.getPaidTierDailyLimit()
+
+        // 전체 폰 SMS 카운트 (통신사 차단 방지)
+        val totalPhoneSms = getTodayTotalSmsCount()
+        val tier = appPreferences.getSubscriptionTier()
+        val limit = if (tier == "free") {
+            appPreferences.getDailyLimitCount()  // 50
         } else {
-            appPreferences.getDailyLimitCount()
+            appPreferences.getPaidTierDailyLimit()  // 149
         }
 
-        if (currentCount >= limit) {
-            Log.w(TAG, "Daily limit reached: $currentCount/$limit")
+        if (totalPhoneSms >= limit) {
+            Log.w(TAG, "Daily limit reached (total phone SMS): $totalPhoneSms/$limit")
             return false
         }
 
-        // Increment
+        // 고유 수신자 2000명 제한 (통신사 차단 방지)
+        val uniqueRecipients = getTodayUniqueRecipientCount()
+        if (uniqueRecipients >= 2000) {
+            Log.w(TAG, "Unique recipient limit reached: $uniqueRecipients/2000")
+            return false
+        }
+
+        // 앱 내부 카운트도 동기화
         val existing = dailyLimitDao.get(userId, today)
         if (existing != null) {
             dailyLimitDao.incrementCount(userId, today, System.currentTimeMillis())
@@ -72,6 +140,16 @@ class SmsSender @Inject constructor(
             ))
         }
         return true
+    }
+
+    /**
+     * 남은 폰 발송 건수 (외부에서 조회용)
+     */
+    fun getRemainingPhoneSmsCount(): Int {
+        val totalPhoneSms = getTodayTotalSmsCount()
+        val tier = appPreferences.getSubscriptionTier()
+        val limit = if (tier == "free") appPreferences.getDailyLimitCount() else appPreferences.getPaidTierDailyLimit()
+        return (limit - totalPhoneSms).coerceAtLeast(0)
     }
 
     suspend fun sendSms(phoneNumber: String, message: String): Long {
@@ -125,12 +203,9 @@ class SmsSender @Inject constructor(
             var sentAsMms = false
 
             if (parts.size > 1) {
-                Log.d(TAG, "Long message (${message.length} chars, ${parts.size} parts) → trying MMS")
-                sentAsMms = trySendViaDirectHttp(phone, message)
-                if (!sentAsMms) {
-                    Log.w(TAG, "MMS failed, falling back to multipart SMS")
-                    smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
-                }
+                // 장문은 멀티파트 SMS로 발송 (MMS HTTP 시도 제거 - 느림 방지)
+                Log.d(TAG, "Long message (${message.length} chars, ${parts.size} parts) → multipart SMS")
+                smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
             } else {
                 smsManager.sendTextMessage(phone, null, message, null, null)
             }
@@ -495,7 +570,6 @@ class SmsSender @Inject constructor(
 
     private fun sendPduViaHttp(pduBytes: ByteArray, mmsc: KoreanMmsc): Boolean {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
-        val wifiManager = context.getSystemService(android.net.wifi.WifiManager::class.java)
 
         val activeNetwork = cm.activeNetwork
         val capabilities = activeNetwork?.let { cm.getNetworkCapabilities(it) }
@@ -516,40 +590,15 @@ class SmsSender @Inject constructor(
             return true
         }
 
-        // 1차 실패 → 2차: WiFi 끄고 셀룰러로 직접 HTTP
-        Log.d(TAG, "[MMS] WiFi system API failed → 2차: WiFi OFF → cellular direct HTTP")
+        // 시스템 API 실패 → 셀룰러 네트워크 요청으로 MMS 전송 시도
+        Log.d(TAG, "[MMS] WiFi system API failed → requesting cellular network for MMS")
+        val mmsNetwork = acquireMmsNetwork(cm)
         try {
-            @Suppress("DEPRECATION")
-            val wifiDisabled = try {
-                wifiManager?.isWifiEnabled = false
-                true
-            } catch (e: Exception) {
-                Log.w(TAG, "[MMS] Cannot disable WiFi: ${e.message}")
-                false
-            }
-
-            if (!wifiDisabled) {
-                Log.w(TAG, "[MMS] WiFi control not available, cannot fallback to cellular")
-                return false
-            }
-
-            Log.d(TAG, "[MMS] WiFi disabled, waiting for cellular...")
-            Thread.sleep(3000)
-
-            val result = tryHttpPost(pduBytes, mmsc, null)
-            Log.d(TAG, "[MMS] Cellular direct HTTP result: $result")
-
-            // WiFi 복원
-            @Suppress("DEPRECATION")
-            wifiManager?.isWifiEnabled = true
-            Log.d(TAG, "[MMS] WiFi restored")
-
+            val result = tryHttpPost(pduBytes, mmsc, mmsNetwork)
+            Log.d(TAG, "[MMS] Cellular network MMS result: $result")
             return result
-        } catch (e: Exception) {
-            Log.e(TAG, "[MMS] Cellular fallback error: ${e.message}")
-            @Suppress("DEPRECATION")
-            try { wifiManager?.isWifiEnabled = true } catch (_: Exception) {}
-            return false
+        } finally {
+            releaseMmsNetwork(cm)
         }
     }
 

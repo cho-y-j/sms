@@ -31,6 +31,8 @@ class AiSettingsViewModel @Inject constructor(
         val spamApiEnabled: Boolean = false,
         val todayTokens: Int = 0,
         val monthTokens: Int = 0,
+        val aiUsageToday: Int = 0,
+        val aiDailyLimit: Int = 10,
         val isLoading: Boolean = true
     )
 
@@ -53,6 +55,8 @@ class AiSettingsViewModel @Inject constructor(
                 ipqsApiKey = appPreferences.getIpqsApiKey(),
                 systemPrompt = appPreferences.getAiSystemPrompt(),
                 spamApiEnabled = appPreferences.getSpamApiEnabled(),
+                aiUsageToday = appPreferences.getAiUsageToday(),
+                aiDailyLimit = appPreferences.getAiDailyLimit(),
                 isLoading = false
             )
         }

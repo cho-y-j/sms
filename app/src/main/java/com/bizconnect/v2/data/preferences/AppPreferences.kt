@@ -46,6 +46,8 @@ class AppPreferences @Inject constructor(
         private val KEY_DEEPSEEK_API_KEY = stringPreferencesKey("deepseek_api_key")
         private val KEY_AI_ENABLED = booleanPreferencesKey("ai_enabled")
         private val KEY_AI_SYSTEM_PROMPT = stringPreferencesKey("ai_system_prompt")
+        private val KEY_AI_DAILY_COUNT = intPreferencesKey("ai_daily_count")
+        private val KEY_AI_DAILY_DATE = stringPreferencesKey("ai_daily_date")
 
         // Spam keys
         private val KEY_OVERSEAS_BLOCK_ENABLED = booleanPreferencesKey("overseas_block_enabled")
@@ -53,13 +55,19 @@ class AppPreferences @Inject constructor(
         private val KEY_IPQS_API_KEY = stringPreferencesKey("ipqs_api_key")
         private val KEY_SPAM_API_ENABLED = booleanPreferencesKey("spam_api_enabled")
 
+        // Role keys
+        private val KEY_USER_ROLE = stringPreferencesKey("user_role")
+
+        // SMS Sync consent
+        private val KEY_SMS_SYNC_CONSENTED = booleanPreferencesKey("sms_sync_consented")
+
         // Engine keys
         private val KEY_QUEUE_THROTTLE_MS = longPreferencesKey("queue_throttle_ms")
         private val KEY_LIMIT_MODE = stringPreferencesKey("limit_mode")
 
         // Defaults
         private const val DEFAULT_DAILY_LIMIT = 50
-        private const val DEFAULT_PAID_TIER_DAILY_LIMIT = 150
+        private const val DEFAULT_PAID_TIER_DAILY_LIMIT = 149
         private const val DEFAULT_SUBSCRIPTION_TIER = "free"
         private const val DEFAULT_CREDIT_BALANCE = 0.0
         private const val DEFAULT_SMS_COST = 9.8
@@ -71,11 +79,19 @@ class AppPreferences @Inject constructor(
 
     // --- Helpers ---
 
-    private fun <T> readSync(key: Preferences.Key<T>, default: T): T = runBlocking {
-        dataStore.data.first()[key] ?: default
+    private var cache = mutableMapOf<String, Any?>()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> readSync(key: Preferences.Key<T>, default: T): T {
+        val cached = cache[key.name] as? T
+        if (cached != null) return cached
+        return runBlocking {
+            dataStore.data.first()[key] ?: default
+        }.also { cache[key.name] = it }
     }
 
     private fun <T> writeSync(key: Preferences.Key<T>, value: T) {
+        cache[key.name] = value
         runBlocking {
             dataStore.edit { prefs -> prefs[key] = value }
         }
@@ -117,6 +133,12 @@ class AppPreferences @Inject constructor(
             }
         }
     }
+
+    // --- Role ---
+
+    fun getUserRole(): String = readSync(KEY_USER_ROLE, "user")
+
+    fun setUserRole(role: String) = writeSync(KEY_USER_ROLE, role)
 
     // --- FCM ---
 
@@ -190,7 +212,7 @@ class AppPreferences @Inject constructor(
 
     // --- AI ---
 
-    fun getDeepSeekApiKey(): String = readSync(KEY_DEEPSEEK_API_KEY, "sk-79592609ad09488d823a6a819688747f")
+    fun getDeepSeekApiKey(): String = readSync(KEY_DEEPSEEK_API_KEY, "")
 
     fun setDeepSeekApiKey(key: String) = writeSync(KEY_DEEPSEEK_API_KEY, key)
 
@@ -201,6 +223,47 @@ class AppPreferences @Inject constructor(
     fun getAiSystemPrompt(): String = readSync(KEY_AI_SYSTEM_PROMPT, "")
 
     fun setAiSystemPrompt(prompt: String) = writeSync(KEY_AI_SYSTEM_PROMPT, prompt)
+
+    /**
+     * AI 일일 사용량 체크 및 증가
+     * 무료: 10건/일, Business(paid): 500건/일, Premium: 무제한
+     */
+    fun getAiDailyLimit(): Int {
+        return when (getSubscriptionTier()) {
+            "premium" -> Int.MAX_VALUE  // 무제한
+            "paid" -> 500
+            else -> 10
+        }
+    }
+
+    fun checkAndIncrementAiUsage(): Boolean {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.KOREA).format(java.util.Date())
+        val savedDate = readSync(KEY_AI_DAILY_DATE, "")
+        var count = if (savedDate == today) readSync(KEY_AI_DAILY_COUNT, 0) else 0
+
+        val limit = getAiDailyLimit()
+        if (count >= limit) return false
+
+        count++
+        writeSync(KEY_AI_DAILY_COUNT, count)
+        writeSync(KEY_AI_DAILY_DATE, today)
+        return true
+    }
+
+    fun getAiUsageToday(): Int {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.KOREA).format(java.util.Date())
+        val savedDate = readSync(KEY_AI_DAILY_DATE, "")
+        return if (savedDate == today) readSync(KEY_AI_DAILY_COUNT, 0) else 0
+    }
+
+    /**
+     * 비즈니스 기능 접근 가능 여부
+     * 무료: 비즈니스 기능 제한
+     */
+    fun isBusinessFeatureAvailable(): Boolean {
+        val tier = getSubscriptionTier()
+        return tier == "paid" || tier == "premium"
+    }
 
     // --- Spam ---
 
@@ -219,4 +282,10 @@ class AppPreferences @Inject constructor(
     fun getSpamApiEnabled(): Boolean = readSync(KEY_SPAM_API_ENABLED, false)
 
     fun setSpamApiEnabled(enabled: Boolean) = writeSync(KEY_SPAM_API_ENABLED, enabled)
+
+    // --- SMS Sync Consent ---
+
+    fun isSmsSyncConsented(): Boolean = readSync(KEY_SMS_SYNC_CONSENTED, false)
+
+    fun setSmsSyncConsented(consented: Boolean) = writeSync(KEY_SMS_SYNC_CONSENTED, consented)
 }

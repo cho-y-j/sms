@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BizConnect - 비즈니스 문자 플랫폼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg: #09090b; --surface: #18181b; --surface2: #27272a;
+    --border: #3f3f46; --text: #fafafa; --text2: #a1a1aa; --text3: #71717a;
+    --accent: #6366f1; --accent2: #818cf8; --accent-glow: rgba(99,102,241,0.15);
+    --green: #22c55e; --blue: #3b82f6; --orange: #f59e0b;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; }
+
+/* Grain overlay */
+body::before {
+    content:''; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:0.03;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* Header */
+.header {
+    position:fixed; top:0; width:100%; z-index:100; padding:0 24px;
+    background:rgba(9,9,11,0.8); backdrop-filter:blur(20px) saturate(1.5);
+    border-bottom:1px solid rgba(63,63,70,0.5);
+}
+.header-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:60px; }
+.logo { font-size:20px; font-weight:800; color:var(--text); text-decoration:none; letter-spacing:-0.5px; }
+.logo span { background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.nav { display:flex; align-items:center; gap:8px; }
+.nav a { text-decoration:none; color:var(--text2); font-size:13px; font-weight:500; padding:6px 14px; border-radius:8px; transition:all 0.2s; }
+.nav a:hover { color:var(--text); background:var(--surface); }
+.nav .btn-nav { background:var(--accent); color:#fff; font-weight:600; }
+.nav .btn-nav:hover { background:var(--accent2); }
+
+/* Hero */
+.hero { padding:140px 24px 60px; text-align:center; position:relative; overflow:hidden; }
+.hero::before {
+    content:''; position:absolute; top:-200px; left:50%; transform:translateX(-50%);
+    width:800px; height:800px; border-radius:50%;
+    background:radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
+    pointer-events:none;
+}
+.hero-badge {
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--surface); border:1px solid var(--border); padding:6px 16px 6px 8px;
+    border-radius:100px; font-size:12px; color:var(--text2); margin-bottom:28px;
+}
+.hero-badge .dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.hero h1 {
+    font-size:clamp(36px,6vw,64px); font-weight:900; line-height:1.1; letter-spacing:-2px;
+    margin-bottom:20px; max-width:700px; margin-left:auto; margin-right:auto;
+}
+.hero h1 .grad { background:linear-gradient(135deg,var(--accent),#a78bfa,var(--blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.hero p { font-size:17px; color:var(--text2); max-width:480px; margin:0 auto 40px; line-height:1.7; }
+.hero-btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.btn {
+    display:inline-flex; align-items:center; gap:8px; padding:12px 28px; border-radius:10px;
+    font-size:14px; font-weight:600; text-decoration:none; transition:all 0.2s; border:none; cursor:pointer;
+}
+.btn-fill { background:var(--accent); color:#fff; }
+.btn-fill:hover { background:var(--accent2); transform:translateY(-1px); box-shadow:0 8px 30px rgba(99,102,241,0.3); }
+.btn-ghost { background:transparent; color:var(--text); border:1px solid var(--border); }
+.btn-ghost:hover { background:var(--surface); border-color:var(--text3); }
+
+/* Metrics */
+.metrics {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px; max-width:700px; margin:60px auto 0;
+    background:var(--border); border-radius:16px; overflow:hidden;
+}
+.metric { background:var(--surface); padding:28px 20px; text-align:center; }
+.metric .val { font-size:28px; font-weight:800; letter-spacing:-1px; }
+.metric .val.purple { color:var(--accent2); }
+.metric .val.green { color:var(--green); }
+.metric .val.blue { color:var(--blue); }
+.metric .val.orange { color:var(--orange); }
+.metric .lbl { font-size:12px; color:var(--text3); margin-top:4px; font-weight:500; }
+
+/* Section */
+.section { max-width:1100px; margin:0 auto; padding:100px 24px; }
+.stitle { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:var(--accent2); margin-bottom:12px; }
+.htitle { font-size:clamp(28px,4vw,40px); font-weight:800; letter-spacing:-1px; margin-bottom:16px; }
+.subdesc { font-size:15px; color:var(--text2); margin-bottom:48px; max-width:500px; line-height:1.6; }
+
+/* Feature Grid */
+.fgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+.fcard {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px;
+    transition:all 0.3s; position:relative; overflow:hidden;
+}
+.fcard:hover { border-color:var(--accent); background:linear-gradient(135deg,var(--accent-glow),transparent); transform:translateY(-2px); }
+.fcard .icon { font-size:28px; margin-bottom:14px; display:block; }
+.fcard h3 { font-size:16px; font-weight:700; margin-bottom:6px; }
+.fcard p { font-size:13px; color:var(--text3); line-height:1.6; }
+
+/* Pricing */
+.pricing-section { background:var(--surface); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.pgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
+.pcard {
+    background:var(--bg); border:1px solid var(--border); border-radius:20px; padding:36px 28px;
+    position:relative; transition:all 0.3s;
+}
+.pcard.pop { border-color:var(--accent); }
+.pcard.pop::before {
+    content:'BEST'; position:absolute; top:16px; right:16px;
+    background:var(--accent); color:#fff; padding:3px 10px; border-radius:6px; font-size:10px; font-weight:800; letter-spacing:1px;
+}
+.pcard .plan { font-size:13px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:1px; }
+.pcard .price { font-size:44px; font-weight:900; letter-spacing:-2px; margin:12px 0 4px; }
+.pcard .price sub { font-size:14px; font-weight:500; color:var(--text3); letter-spacing:0; }
+.pcard .pdesc { font-size:13px; color:var(--text3); margin-bottom:24px; }
+.pcard ul { list-style:none; margin-bottom:28px; }
+.pcard li { font-size:13px; color:var(--text2); padding:7px 0; display:flex; align-items:center; gap:8px; }
+.pcard li::before { content:''; width:16px; height:16px; border-radius:50%; background:var(--accent-glow); border:1px solid var(--accent); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.pcard .btn { width:100%; justify-content:center; }
+
+/* SMS Cost */
+.cost-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.cost-item {
+    background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:24px 16px; text-align:center;
+    transition:all 0.3s;
+}
+.cost-item:hover { border-color:var(--accent); }
+.cost-item .ctype { font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+.cost-item .cprice { font-size:32px; font-weight:900; letter-spacing:-1px; }
+.cost-item .cprice span { font-size:13px; font-weight:500; color:var(--text3); }
+.cost-item .cnote { font-size:11px; color:var(--text3); margin-top:4px; }
+
+/* CTA */
+.cta-section {
+    text-align:center; padding:100px 24px; position:relative;
+    background:linear-gradient(180deg, var(--bg) 0%, rgba(99,102,241,0.05) 100%);
+}
+.cta-section h2 { font-size:clamp(28px,4vw,44px); font-weight:900; letter-spacing:-1.5px; margin-bottom:16px; }
+.cta-section p { color:var(--text2); font-size:15px; margin-bottom:36px; }
+.cta-badge {
+    display:inline-flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border);
+    padding:10px 24px; border-radius:12px; font-size:13px; color:var(--text2); margin-top:20px; text-decoration:none;
+    transition:all 0.2s;
+}
+.cta-badge:hover { border-color:var(--accent); color:var(--text); }
+
+/* Footer */
+.footer {
+    padding:32px 24px; text-align:center; font-size:12px; color:var(--text3);
+    border-top:1px solid var(--border);
+}
+.footer a { color:var(--text2); text-decoration:none; margin:0 12px; }
+.footer a:hover { color:var(--accent2); }
+
+/* Responsive */
+@media(max-width:768px) {
+    .nav a:not(.btn-nav) { display:none; }
+    .metrics { grid-template-columns:repeat(2,1fr); }
+    .cost-grid { grid-template-columns:repeat(2,1fr); }
+    .fgrid { grid-template-columns:1fr; }
+}
+@media(max-width:480px) {
+    .hero h1 { letter-spacing:-1px; }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+<div class="header-inner">
+    <a href="/" class="logo">Biz<span>Connect</span></a>
+    <nav class="nav">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/portal">웹 문자</a>
+        <a href="#" onclick="showAuth('login')" class="btn-nav">로그인</a>
+    </nav>
+</div>
+</header>
+
+<section class="hero">
+    <div class="hero-badge"><span class="dot"></span>지금 서비스 운영 중</div>
+    <h1>문자 하나로<br><span class="grad">비즈니스를 움직이다</span></h1>
+    <p>AI 기반 스마트 문자 관리부터 대량 발송, 자동 콜백, 고객 CRM까지. 하나의 앱으로 끝내세요.</p>
+    <div class="hero-btns">
+        <a href="#" onclick="showAuth('signup')" class="btn btn-fill">무료로 시작하기</a>
+        <a href="#" onclick="showAuth('login')" class="btn btn-ghost">로그인</a>
+    </div>
+    <div class="metrics">
+        <div class="metric"><div class="val purple">149</div><div class="lbl">일일 무료 발송</div></div>
+        <div class="metric"><div class="val green">8원~</div><div class="lbl">웹 발송 단가</div></div>
+        <div class="metric"><div class="val blue">AI</div><div class="lbl">AI 어시스턴트</div></div>
+        <div class="metric"><div class="val orange">24/7</div><div class="lbl">자동 콜백</div></div>
+    </div>
+</section>
+
+<section class="section" id="features">
+    <div class="stitle">Features</div>
+    <h2 class="htitle">비즈니스에 필요한 모든 것</h2>
+    <p class="subdesc">문자 앱 하나로 고객 관리부터 마케팅까지. 복잡한 건 AI에게 맡기세요.</p>
+    <div class="fgrid">
+        <div class="fcard"><span class="icon">💬</span><h3>기본 SMS 앱</h3><p>삼성 메시지 수준의 완성도. 기본 앱으로 설정하면 모든 문자를 BizConnect에서 관리합니다.</p></div>
+        <div class="fcard"><span class="icon">🚀</span><h3>대량 발송</h3><p>핸드폰 직접 발송(무료) + 웹 API 발송(유료). 변수 치환(%이름%)으로 개인화된 대량 메시지.</p></div>
+        <div class="fcard"><span class="icon">🧠</span><h3>AI 어시스턴트</h3><p>대화 요약, 답장 추천, 감정 분석, 톤 변환, 약속 자동 감지. BizConnect AI가 도와드립니다.</p></div>
+        <div class="fcard"><span class="icon">⏰</span><h3>예약 발송</h3><p>원하는 시간에 자동 발송. 매일/매주/매월 반복 설정으로 정기 안내 문자도 간편하게.</p></div>
+        <div class="fcard"><span class="icon">📞</span><h3>자동 콜백</h3><p>통화 종료 후 자동으로 문자 발송. 부재중/수신/발신 별도 설정. 명함 이미지 첨부.</p></div>
+        <div class="fcard"><span class="icon">👥</span><h3>고객 CRM</h3><p>카테고리별 분류, 메모, 발송 이력. 연락처와 통합된 가벼운 CRM.</p></div>
+        <div class="fcard"><span class="icon">🛡</span><h3>스팸 차단</h3><p>키워드/번호 차단, 해외번호 필터링, AI 스팸 판별. APick DB 연동으로 정확한 차단.</p></div>
+        <div class="fcard"><span class="icon">📋</span><h3>템플릿</h3><p>자주 쓰는 문구를 저장하고 변수를 자동 치환. 이미지 포함 MMS 템플릿도 지원.</p></div>
+        <div class="fcard"><span class="icon">💳</span><h3>간편 결제</h3><p>NICE Pay 연동. 카드/카카오페이/네이버페이로 크레딧 충전 후 유료 발송.</p></div>
+    </div>
+</section>
+
+<section class="pricing-section" id="pricing">
+<div class="section">
+    <div class="stitle">Pricing</div>
+    <h2 class="htitle">심플한 요금제</h2>
+    <p class="subdesc">무료로 시작하세요. 비즈니스가 커지면 그때 업그레이드.</p>
+    <div class="pgrid">
+        <div class="pcard">
+            <div class="plan">Free</div>
+            <div class="price">0<sub>원/월</sub></div>
+            <div class="pdesc">개인 사용자를 위한 기본 플랜</div>
+            <ul>
+                <li>일 50건 핸드폰 발송</li>
+                <li>기본 SMS/MMS</li>
+                <li>AI 기능 (일 제한)</li>
+                <li>메시지 템플릿</li>
+                <li>스팸 차단</li>
+            </ul>
+            <a href="#" onclick="showAuth('signup')" class="btn btn-ghost">무료로 시작</a>
+        </div>
+        <div class="pcard pop">
+            <div class="plan">Business</div>
+            <div class="price">4,900<sub>원/월</sub></div>
+            <div class="pdesc">소상공인과 영업 담당자를 위한 플랜</div>
+            <ul>
+                <li>일 149건 핸드폰 발송</li>
+                <li>유료 웹 발송 (크레딧)</li>
+                <li>AI 기능 무제한</li>
+                <li>자동 콜백</li>
+                <li>대량 발송 + 예약</li>
+                <li>고객 CRM</li>
+            </ul>
+            <a href="#" onclick="handlePayment(4900,'BizConnect Business 구독','subscription')" class="btn btn-fill">구독하기</a>
+        </div>
+        <div class="pcard">
+            <div class="plan">Premium</div>
+            <div class="price">9,900<sub>원/월</sub></div>
+            <div class="pdesc">팀과 기업을 위한 프리미엄 플랜</div>
+            <ul>
+                <li>Business 전체 포함</li>
+                <li>우선 기술 지원</li>
+                <li>API 키 발급</li>
+                <li>웹훅 연동</li>
+                <li>맞춤 리포트</li>
+            </ul>
+            <a href="#" onclick="handlePayment(9900,'BizConnect Premium 구독','subscription')" class="btn btn-ghost">구독하기</a>
+        </div>
+    </div>
+</div>
+</section>
+
+<section class="section" id="cost">
+    <div class="stitle">SMS Pricing</div>
+    <h2 class="htitle">유료 웹 발송 단가</h2>
+    <p class="subdesc">통신사 차단 없이 안전하게. 크레딧 충전 후 건당 과금.</p>
+    <div class="cost-grid">
+        <div class="cost-item">
+            <div class="ctype">SMS</div>
+            <div class="cprice">8<span>원</span></div>
+            <div class="cnote">90byte 이하</div>
+        </div>
+        <div class="cost-item">
+            <div class="ctype">LMS</div>
+            <div class="cprice">25<span>원</span></div>
+            <div class="cnote">2,000byte 이하</div>
+        </div>
+        <div class="cost-item">
+            <div class="ctype">MMS</div>
+            <div class="cprice">50<span>원</span></div>
+            <div class="cnote">이미지 포함</div>
+        </div>
+        <div class="cost-item">
+            <div class="ctype">알림톡</div>
+            <div class="cprice">7<span>원</span></div>
+            <div class="cnote">카카오톡</div>
+        </div>
+    </div>
+</section>
+
+<section class="cta-section" id="download">
+    <h2>지금 <span class="grad">시작</span>하세요</h2>
+    <p>무료 플랜으로 바로 사용해 보세요</p>
+    <a href="#" class="btn btn-fill" style="font-size:16px; padding:14px 36px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Google Play 다운로드
+    </a>
+    <br>
+    <a href="/portal" class="cta-badge" style="margin-right:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        웹에서 문자 보내기
+    </a>
+    <a href="/mgmt-dainon" class="cta-badge">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        관리자 패널
+    </a>
+</section>
+
+<!-- Auth Modal -->
+<div id="authModal" class="modal-overlay" style="display:none">
+<div class="modal">
+    <button class="modal-close" onclick="closeAuth()">&times;</button>
+    <div class="modal-tabs">
+        <button class="tab active" id="tabLogin" onclick="switchTab('login')">로그인</button>
+        <button class="tab" id="tabSignup" onclick="switchTab('signup')">회원가입</button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="loginForm" class="auth-form" onsubmit="handleLogin(event)">
+        <div class="field">
+            <label>이메일</label>
+            <input type="email" id="loginEmail" placeholder="email@example.com" required>
+        </div>
+        <div class="field">
+            <label>비밀번호</label>
+            <input type="password" id="loginPassword" placeholder="비밀번호 입력" required>
+        </div>
+        <div id="loginError" class="form-error"></div>
+        <button type="submit" class="btn btn-fill" style="width:100%;justify-content:center;margin-top:8px">로그인</button>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signupForm" class="auth-form" style="display:none" onsubmit="handleSignup(event)">
+        <div class="field">
+            <label>이름</label>
+            <input type="text" id="signupName" placeholder="홍길동" required>
+        </div>
+        <div class="field">
+            <label>전화번호</label>
+            <div style="display:flex;gap:8px;">
+                <input type="tel" id="signupPhone" placeholder="01012345678" required style="flex:1">
+                <button type="button" class="btn btn-outline" id="sendVerifyBtn" onclick="sendPhoneVerification()" style="white-space:nowrap;font-size:12px;padding:8px 12px;">인증번호 발송</button>
+            </div>
+        </div>
+        <div class="field" id="verifyCodeField" style="display:none">
+            <label>인증번호 <span id="verifyTimer" style="color:var(--accent);font-size:11px;"></span></label>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="verifyCode" placeholder="6자리 입력" maxlength="6" style="flex:1;letter-spacing:8px;font-size:18px;text-align:center;">
+                <button type="button" class="btn btn-fill" onclick="confirmVerification()" style="white-space:nowrap;font-size:12px;padding:8px 12px;">확인</button>
+            </div>
+            <div id="verifyError" style="color:#ef4444;font-size:11px;margin-top:4px;"></div>
+        </div>
+        <div id="verifySuccess" style="display:none;color:#22c55e;font-size:12px;padding:6px 0;">✅ 전화번호 인증 완료</div>
+        <div class="field">
+            <label>이메일</label>
+            <input type="email" id="signupEmail" placeholder="email@example.com" required>
+        </div>
+        <div class="field">
+            <label>비밀번호</label>
+            <input type="password" id="signupPassword" placeholder="4자 이상" minlength="4" required>
+        </div>
+
+        <div style="margin:12px 0;padding:12px;background:rgba(255,200,200,0.1);border:1px solid rgba(255,100,100,0.2);border-radius:8px;">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:8px;">
+                <input type="checkbox" id="agreeTerms" style="margin-top:3px;">
+                <span style="font-size:11px;color:var(--text2);">[필수] <a href="#" onclick="document.getElementById('termsDetail').style.display=document.getElementById('termsDetail').style.display==='none'?'block':'none';return false" style="color:var(--accent)">서비스 이용약관</a> 및 개인정보 처리방침에 동의합니다</span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="agreeAd" style="margin-top:3px;">
+                <span style="font-size:11px;color:var(--text2);">[필수] 광고성 문자는 폰 발송이 법적으로 금지되며, 위반 시 모든 법적 책임(과태료 최대 3,000만원)은 이용자에게 있음을 확인합니다</span>
+            </label>
+        </div>
+
+        <div id="termsDetail" style="display:none;max-height:200px;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;margin-bottom:12px;font-size:10px;color:var(--text3);line-height:1.6;">
+            <strong>(주)다인온 BizConnect 서비스 이용약관</strong><br><br>
+            제1조 (목적) 본 약관은 (주)다인온이 제공하는 BizConnect 서비스의 이용조건을 규정합니다.<br><br>
+            제2조 (이용자의 의무)<br>
+            ① 이용자는 관련 법률을 준수하여 서비스를 이용해야 합니다.<br>
+            ② 광고성 문자는 반드시 유료 API를 통해 발송해야 하며, 폰 문자를 이용한 광고성 문자 발송은 엄격히 금지됩니다.<br>
+            ③ 광고성 문자 발송 시 (광고) 표기, 080 수신거부번호 포함, 야간(21~08시) 발송 금지를 준수해야 합니다.<br>
+            ④ 이를 위반하여 발생하는 모든 법적 책임은 전적으로 이용자에게 있습니다.<br><br>
+            제3조 (면책) (주)다인온은 이용자의 불법적인 문자 발송으로 인한 법적 분쟁에 대해 책임을 지지 않습니다.<br><br>
+            제4조 (개인정보) 수집항목: 이름, 전화번호, 이메일 / 이용목적: 서비스 제공 / 보유기간: 탈퇴 시까지
+        </div>
+
+        <div id="signupError" class="form-error"></div>
+        <div id="signupSuccess" class="form-success"></div>
+        <button type="submit" class="btn btn-fill" style="width:100%;justify-content:center;margin-top:8px" id="signupBtn">가입하기</button>
+    </form>
+
+    <!-- Logged-in State -->
+    <div id="loggedInView" class="auth-form" style="display:none">
+        <div style="text-align:center;padding:20px 0">
+            <div style="font-size:40px;margin-bottom:12px">👋</div>
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px" id="userName"></div>
+            <div style="font-size:13px;color:var(--text3);margin-bottom:24px" id="userTier"></div>
+            <div class="user-stats">
+                <div class="us"><div class="us-val" id="userBalance">0</div><div class="us-lbl">크레딧(원)</div></div>
+                <div class="us"><div class="us-val" id="userUsage">0</div><div class="us-lbl">오늘 발송</div></div>
+            </div>
+            <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px">
+                <div class="stitle" style="margin:8px 0 4px;text-align:left">크레딧 충전</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+                    <button class="charge-btn" onclick="handlePayment(5000,'크레딧 5,000원 충전','credit_charge')">5,000원</button>
+                    <button class="charge-btn" onclick="handlePayment(10000,'크레딧 10,000원 충전','credit_charge')">10,000원</button>
+                    <button class="charge-btn" onclick="handlePayment(50000,'크레딧 50,000원 충전','credit_charge')">50,000원</button>
+                </div>
+                <div class="stitle" style="margin:12px 0 4px;text-align:left">구독</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+                    <button class="charge-btn pop" onclick="handlePayment(4900,'Business 구독','subscription')">Business 4,900원</button>
+                    <button class="charge-btn" onclick="handlePayment(9900,'Premium 구독','subscription')">Premium 9,900원</button>
+                </div>
+            </div>
+            <a href="/portal" class="btn btn-fill" style="width:100%;justify-content:center;margin-top:16px;text-decoration:none;">웹 문자 바로가기 →</a>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px" onclick="handleLogout()">로그아웃</button>
+        </div>
+    </div>
+</div>
+</div>
+
+<style>
+.modal-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:32px; width:380px; max-width:90vw; position:relative; }
+.modal-close { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text3); font-size:24px; cursor:pointer; }
+.modal-close:hover { color:var(--text); }
+.modal-tabs { display:flex; gap:4px; margin-bottom:24px; background:var(--bg); border-radius:10px; padding:4px; }
+.tab { flex:1; padding:8px; border:none; background:transparent; color:var(--text3); font-size:13px; font-weight:600; border-radius:8px; cursor:pointer; transition:all 0.2s; }
+.tab.active { background:var(--accent); color:#fff; }
+.field { margin-bottom:14px; }
+.field label { display:block; font-size:12px; font-weight:600; color:var(--text2); margin-bottom:6px; }
+.field input { width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; outline:none; transition:border 0.2s; }
+.field input:focus { border-color:var(--accent); }
+.field input::placeholder { color:var(--text3); }
+.form-error { font-size:12px; color:#ef4444; min-height:18px; margin-top:4px; }
+.form-success { font-size:12px; color:var(--green); min-height:18px; margin-top:4px; }
+.user-stats { display:flex; gap:16px; justify-content:center; }
+.us { text-align:center; flex:1; background:var(--bg); border-radius:12px; padding:16px; }
+.us-val { font-size:22px; font-weight:800; color:var(--accent2); }
+.us-lbl { font-size:11px; color:var(--text3); margin-top:2px; }
+.charge-btn {
+    background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 8px;
+    color:var(--text); font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s;
+}
+.charge-btn:hover { border-color:var(--accent); background:var(--accent-glow); }
+.charge-btn.pop { border-color:var(--accent); color:var(--accent2); }
+</style>
+
+<script>
+const API = '';
+
+function showAuth(tab) {
+    document.getElementById('authModal').style.display = 'flex';
+    const tk = localStorage.getItem('user_token');
+    if (tk) {
+        showLoggedIn();
+    } else {
+        switchTab(tab || 'login');
+    }
+}
+
+function closeAuth() {
+    document.getElementById('authModal').style.display = 'none';
+}
+
+function switchTab(tab) {
+    document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+    document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('loggedInView').style.display = 'none';
+    document.getElementById('tabLogin').className = tab === 'login' ? 'tab active' : 'tab';
+    document.getElementById('tabSignup').className = tab === 'signup' ? 'tab active' : 'tab';
+    document.getElementById('loginError').textContent = '';
+    document.getElementById('signupError').textContent = '';
+    document.getElementById('signupSuccess').textContent = '';
+}
+
+async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const deviceToken = localStorage.getItem('device_token') || '';
+    try {
+        const res = await fetch(API + '/api/auth/login', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({email, password, deviceToken})
+        });
+        const data = await res.json();
+        if (data.requiresDeviceVerification === 'true') {
+            showLandingDeviceVerify(email, password, data.phone);
+            return;
+        }
+        if (res.ok && data.token) {
+            localStorage.setItem('user_token', data.token);
+            if (data.refreshToken) localStorage.setItem('user_refresh_token', data.refreshToken);
+            if (data.deviceToken) localStorage.setItem('device_token', data.deviceToken);
+            localStorage.setItem('biz_user', data.displayName || email);
+            localStorage.setItem('biz_tier', data.tier || 'free');
+            showLoggedIn();
+        } else {
+            document.getElementById('loginError').textContent = data.error || data.message || '로그인 실패';
+        }
+    } catch (err) {
+        document.getElementById('loginError').textContent = '서버 연결 실패';
+    }
+}
+
+function showLandingDeviceVerify(loginId, password, userPhone) {
+    const form = document.getElementById('loginForm');
+    form.innerHTML = `
+        <div class="field"><label>새 기기 인증</label>
+            <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">보안을 위해 SMS 인증이 필요합니다.<br>인증번호가 ${userPhone} 으로 발송됩니다.</p>
+            <button type="button" class="btn btn-fill" style="width:100%;justify-content:center;margin-bottom:12px;" id="ldSendBtn" onclick="sendLdDeviceCode('${userPhone}')">인증번호 발송</button>
+        </div>
+        <div id="ldCodeField" style="display:none;">
+            <div class="field"><label>인증번호 <span id="ldTimer" style="color:var(--accent);font-size:11px;"></span></label>
+                <input type="text" id="ldCode" placeholder="6자리 입력" maxlength="6" style="letter-spacing:6px;font-size:18px;text-align:center;">
+            </div>
+            <div id="ldError" class="form-error"></div>
+            <button type="button" class="btn btn-fill" style="width:100%;justify-content:center;" onclick="confirmLdDevice('${loginId}','${userPhone}')">확인</button>
+        </div>
+        <button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;" onclick="switchTab('login');location.reload();">취소</button>`;
+}
+
+let ldTimerInterval = null;
+async function sendLdDeviceCode(phone) {
+    const btn = document.getElementById('ldSendBtn');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    try {
+        const res = await fetch(API + '/api/auth/send-verification', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({phone, purpose:'login_device'})
+        });
+        if (res.ok) {
+            document.getElementById('ldCodeField').style.display = 'block';
+            btn.textContent = '재발송'; btn.disabled = false;
+            let sec = 180;
+            clearInterval(ldTimerInterval);
+            ldTimerInterval = setInterval(() => {
+                sec--;
+                const m = Math.floor(sec/60), s = sec%60;
+                document.getElementById('ldTimer').textContent = `(${m}:${s<10?'0':''}${s})`;
+                if (sec <= 0) { clearInterval(ldTimerInterval); document.getElementById('ldTimer').textContent = '(만료됨)'; }
+            }, 1000);
+        } else { btn.disabled = false; btn.textContent = '인증번호 발송'; }
+    } catch(e) { btn.disabled = false; btn.textContent = '인증번호 발송'; }
+}
+
+async function confirmLdDevice(loginId, phone) {
+    const code = document.getElementById('ldCode').value.trim();
+    if (code.length !== 6) { document.getElementById('ldError').textContent = '6자리 입력해주세요'; return; }
+    const ua = navigator.userAgent;
+    let browser = 'Unknown', os = 'Unknown';
+    if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
+    else if (ua.includes('Firefox')) browser = 'Firefox';
+    else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+    else if (ua.includes('Edg')) browser = 'Edge';
+    if (ua.includes('Windows')) os = 'Windows'; else if (ua.includes('Mac')) os = 'macOS';
+    else if (ua.includes('Linux')) os = 'Linux'; else if (ua.includes('Android')) os = 'Android';
+    else if (ua.includes('iPhone')||ua.includes('iPad')) os = 'iOS';
+    try {
+        const res = await fetch(API + '/api/auth/verify-device', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({phone, code, purpose:'login_device', deviceName:`${browser} / ${os}`, platform:'web', email:loginId})
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+            clearInterval(ldTimerInterval);
+            localStorage.setItem('user_token', data.token);
+            if (data.refreshToken) localStorage.setItem('user_refresh_token', data.refreshToken);
+            if (data.deviceToken) localStorage.setItem('device_token', data.deviceToken);
+            localStorage.setItem('biz_user', data.displayName || loginId);
+            localStorage.setItem('biz_tier', data.tier || 'free');
+            showLoggedIn();
+        } else { document.getElementById('ldError').textContent = data.error || '인증 실패'; }
+    } catch(e) { document.getElementById('ldError').textContent = '서버 연결 실패'; }
+}
+
+// 전화번호 인증
+let phoneVerified = false;
+let verifyTimerInterval = null;
+
+async function sendPhoneVerification() {
+    const phone = document.getElementById('signupPhone').value.trim();
+    if (!phone || phone.length < 10) { alert('전화번호를 정확히 입력해주세요'); return; }
+    const btn = document.getElementById('sendVerifyBtn');
+    btn.disabled = true; btn.textContent = '발송 중...';
+    try {
+        const res = await fetch(API + '/api/auth/send-verification', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({phone, purpose:'signup'})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('verifyCodeField').style.display = 'block';
+            document.getElementById('signupPhone').readOnly = true;
+            // 3분 타이머
+            let seconds = 180;
+            clearInterval(verifyTimerInterval);
+            verifyTimerInterval = setInterval(() => {
+                seconds--;
+                const m = Math.floor(seconds/60), s = seconds%60;
+                document.getElementById('verifyTimer').textContent = `(${m}:${s<10?'0':''}${s})`;
+                if (seconds <= 0) {
+                    clearInterval(verifyTimerInterval);
+                    document.getElementById('verifyTimer').textContent = '(만료됨)';
+                    btn.disabled = false; btn.textContent = '재발송';
+                }
+            }, 1000);
+        } else {
+            alert(data.error || '발송 실패');
+            btn.disabled = false; btn.textContent = '인증번호 발송';
+        }
+    } catch(e) { alert('서버 연결 실패'); btn.disabled = false; btn.textContent = '인증번호 발송'; }
+}
+
+async function confirmVerification() {
+    const phone = document.getElementById('signupPhone').value.trim();
+    const code = document.getElementById('verifyCode').value.trim();
+    if (code.length !== 6) { document.getElementById('verifyError').textContent = '6자리 입력해주세요'; return; }
+    try {
+        const res = await fetch(API + '/api/auth/verify-code', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({phone, code, purpose:'signup'})
+        });
+        const data = await res.json();
+        if (res.ok && data.verified === 'true') {
+            phoneVerified = true;
+            clearInterval(verifyTimerInterval);
+            document.getElementById('verifyCodeField').style.display = 'none';
+            document.getElementById('verifySuccess').style.display = 'block';
+            document.getElementById('sendVerifyBtn').style.display = 'none';
+        } else {
+            document.getElementById('verifyError').textContent = data.error || '인증 실패';
+        }
+    } catch(e) { document.getElementById('verifyError').textContent = '서버 연결 실패'; }
+}
+
+async function handleSignup(e) {
+    e.preventDefault();
+    const name = document.getElementById('signupName').value;
+    const phone = document.getElementById('signupPhone').value;
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+    document.getElementById('signupError').textContent = '';
+    document.getElementById('signupSuccess').textContent = '';
+
+    if (!phoneVerified) {
+        document.getElementById('signupError').textContent = '전화번호 인증이 필요합니다';
+        return;
+    }
+    if (!document.getElementById('agreeTerms').checked || !document.getElementById('agreeAd').checked) {
+        document.getElementById('signupError').textContent = '이용약관과 광고성 문자 규정에 동의해 주세요';
+        return;
+    }
+    try {
+        const res = await fetch(API + '/api/auth/register', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({name, phone, email, password})
+        });
+        const data = await res.json();
+        if (res.ok && (data.token || data.userId)) {
+            if (data.token) {
+                localStorage.setItem('user_token', data.token);
+                if (data.refreshToken) localStorage.setItem('user_refresh_token', data.refreshToken);
+                localStorage.setItem('biz_user', data.displayName || name);
+                localStorage.setItem('biz_tier', data.tier || 'free');
+            }
+            document.getElementById('signupSuccess').textContent = '가입 완료! 앱에서 로그인하세요.';
+            setTimeout(() => {
+                if (data.token) showLoggedIn();
+                else switchTab('login');
+            }, 1500);
+        } else {
+            document.getElementById('signupError').textContent = data.error || data.message || '가입 실패';
+        }
+    } catch (err) {
+        document.getElementById('signupError').textContent = '서버 연결 실패';
+    }
+}
+
+function showLoggedIn() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('signupForm').style.display = 'none';
+    document.getElementById('loggedInView').style.display = 'block';
+    document.getElementById('userName').textContent = localStorage.getItem('biz_user') || '사용자';
+    const tier = localStorage.getItem('biz_tier') || 'free';
+    const tierLabel = {free:'무료 플랜', paid:'Business', premium:'Premium'}[tier] || tier;
+    document.getElementById('userTier').textContent = tierLabel;
+    // Fetch balance
+    const token = localStorage.getItem('user_token');
+    if (token) {
+        fetch(API + '/api/subscription/credit', {headers:{'Authorization':'Bearer '+token}})
+            .then(r => r.json()).then(d => {
+                document.getElementById('userBalance').textContent = Math.floor(d.balance || 0).toLocaleString();
+            }).catch(()=>{});
+        fetch(API + '/api/subscription/usage', {headers:{'Authorization':'Bearer '+token}})
+            .then(r => r.json()).then(d => {
+                const u = d.todayUsage;
+                const total = u ? (u.smsCount + u.lmsCount + u.mmsCount) : 0;
+                document.getElementById('userUsage').textContent = total;
+            }).catch(()=>{});
+    }
+}
+
+function handleLogout() {
+    localStorage.removeItem('user_token');
+    localStorage.removeItem('user_refresh_token');
+    localStorage.removeItem('biz_user');
+    localStorage.removeItem('biz_tier');
+    switchTab('login');
+}
+
+// Click outside to close
+document.getElementById('authModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeAuth();
+});
+
+// Payment
+async function handlePayment(amount, goodsName, type) {
+    const token = localStorage.getItem('user_token');
+    if (!token) {
+        showAuth('login');
+        return;
+    }
+    try {
+        const res = await fetch(API + '/api/payment/prepare', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+token},
+            body: JSON.stringify({amount, goodsName, method:'card', type})
+        });
+        const data = await res.json();
+        if (res.ok && data.checkoutUrl) {
+            // 결제 팝업 열기
+            const w = 500, h = 700;
+            const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
+            const popup = window.open(data.checkoutUrl, 'BizConnect 결제',
+                'width='+w+',height='+h+',left='+left+',top='+top+',scrollbars=yes');
+            if (!popup) {
+                // 팝업 차단 시 새 탭
+                window.open(data.checkoutUrl, '_blank');
+            }
+            // 결제 완료 후 잔액 갱신 (폴링)
+            const checkInterval = setInterval(() => {
+                if (popup && popup.closed) {
+                    clearInterval(checkInterval);
+                    setTimeout(() => showLoggedIn(), 1000);
+                }
+            }, 1000);
+        } else {
+            alert(data.error || '결제 준비 실패');
+        }
+    } catch (err) {
+        alert('서버 연결 실패');
+    }
+}
+
+// Update header if logged in
+window.addEventListener('load', () => {
+    const token = localStorage.getItem('user_token');
+    if (token) {
+        const navBtn = document.querySelector('.btn-nav');
+        if (navBtn) navBtn.textContent = localStorage.getItem('biz_user') || '내 계정';
+    }
+});
+</script>
+
+<footer class="footer">
+    <p>&copy; 2026 BizConnect &nbsp;|&nbsp; <a href="/health">API Status</a> <a href="/mgmt-dainon">Admin</a></p>
+</footer>
+
+</body>
+</html>

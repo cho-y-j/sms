@@ -25,6 +25,23 @@ class AiAssistant @Inject constructor(
         private const val SYSTEM_PROMPT = "당신은 한국어 비즈니스 문자 메시지 도우미입니다. 간결하고 자연스러운 한국어로 응답하세요."
     }
 
+    /**
+     * AI 사용량 체크. 한도 초과 시 예외 발생.
+     * 무료: 10건/일, Business: 500건/일, Premium: 무제한
+     */
+    private fun checkAiLimit() {
+        if (!appPreferences.checkAndIncrementAiUsage()) {
+            val limit = appPreferences.getAiDailyLimit()
+            val tier = appPreferences.getSubscriptionTier()
+            val upgradeMsg = when (tier) {
+                "free" -> "무료 회원은 일 10건까지 사용 가능합니다. 유료 구독(4,900원/월)으로 500건까지 이용하세요."
+                "paid" -> "Business 회원은 일 500건까지 사용 가능합니다. Premium(9,900원/월)으로 무제한 이용하세요."
+                else -> "AI 일일 사용 한도를 초과했습니다."
+            }
+            throw Exception(upgradeMsg)
+        }
+    }
+
     private suspend fun getConversationContext(
         threadId: Long,
         limit: Int = 30,
@@ -49,6 +66,7 @@ class AiAssistant @Inject constructor(
         previousSummary: String? = null,
         sinceTimestamp: Long? = null
     ): String {
+        checkAiLimit()
         val useIncremental = !previousSummary.isNullOrBlank() && sinceTimestamp != null
         val context = getConversationContext(
             threadId,
@@ -57,7 +75,7 @@ class AiAssistant @Inject constructor(
 
         if (useIncremental && context.isEmpty()) {
             // No new messages since last summary
-            return previousSummary!!
+            return requireNotNull(previousSummary) { "previousSummary must not be null when useIncremental is true" }
         }
 
         val messages = mutableListOf(
@@ -91,6 +109,7 @@ class AiAssistant @Inject constructor(
     }
 
     suspend fun searchInConversation(threadId: Long, query: String): String {
+        checkAiLimit()
         val context = getConversationContext(threadId)
         val messages = mutableListOf(
             ChatMessage("system", SYSTEM_PROMPT),
@@ -109,6 +128,7 @@ class AiAssistant @Inject constructor(
     }
 
     suspend fun suggestReplies(threadId: Long): List<String> {
+        checkAiLimit()
         val context = getConversationContext(threadId)
         val messages = mutableListOf(
             ChatMessage("system", SYSTEM_PROMPT),
@@ -133,6 +153,7 @@ class AiAssistant @Inject constructor(
     }
 
     suspend fun generateMessage(prompt: String, recipientInfo: String? = null): String {
+        checkAiLimit()
         val systemMsg = if (recipientInfo != null) {
             "$SYSTEM_PROMPT 수신자 정보: $recipientInfo"
         } else {
@@ -152,6 +173,7 @@ class AiAssistant @Inject constructor(
     data class EmotionResult(val emotion: String, val emoji: String, val reason: String)
 
     suspend fun analyzeEmotion(threadId: Long): EmotionResult {
+        checkAiLimit()
         val context = getConversationContext(threadId, limit = 10)
         val messages = mutableListOf(
             ChatMessage("system", SYSTEM_PROMPT),
@@ -180,6 +202,7 @@ class AiAssistant @Inject constructor(
     }
 
     suspend fun convertTone(message: String, tone: String): String {
+        checkAiLimit()
         val messages = listOf(
             ChatMessage("system", SYSTEM_PROMPT),
             ChatMessage(
@@ -201,6 +224,7 @@ class AiAssistant @Inject constructor(
     )
 
     suspend fun extractAppointment(threadId: Long): AppointmentInfo? {
+        checkAiLimit()
         val today = java.text.SimpleDateFormat("yyyy-MM-dd EEEE", java.util.Locale.KOREA).format(java.util.Date())
         val context = getConversationContext(threadId)
         val messages = mutableListOf(
@@ -242,6 +266,7 @@ class AiAssistant @Inject constructor(
      * Extract appointment from a single message text (for incoming SMS auto-detect).
      */
     suspend fun extractAppointmentFromText(text: String): AppointmentInfo? {
+        checkAiLimit()
         val today = java.text.SimpleDateFormat("yyyy-MM-dd EEEE", java.util.Locale.KOREA).format(java.util.Date())
         val messages = listOf(
             ChatMessage(

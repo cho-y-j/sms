@@ -134,7 +134,7 @@ fun MessageDetailScreen(
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && cameraImageUri != null) {
-            selectedImageUris = listOf(cameraImageUri!!)
+            selectedImageUris = listOf(cameraImageUri ?: return@rememberLauncherForActivityResult)
             selectedFileUri = null
             selectedFileName = null
         }
@@ -337,7 +337,7 @@ fun MessageDetailScreen(
                         selectedImageUris = emptyList()
                     }
                     selectedFileUri != null -> {
-                        viewModel.sendFileMessage(text, selectedFileUri!!)
+                        selectedFileUri?.let { uri -> viewModel.sendFileMessage(text, uri) }
                         selectedFileUri = null
                         selectedFileName = null
                     }

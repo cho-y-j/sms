@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BizConnect - 웹 문자</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/portal/portal.css">
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginPage" class="login-page">
+    <div class="login-box">
+        <h1 class="logo">Biz<span>Connect</span></h1>
+        <p class="login-desc">웹에서 문자를 보내세요</p>
+        <input class="input" id="loginPhone" placeholder="전화번호 또는 이메일" autocomplete="username">
+        <input class="input" id="loginPassword" type="password" placeholder="비밀번호" autocomplete="current-password">
+        <div id="loginError" class="error-msg"></div>
+        <button class="btn btn-primary w-full" onclick="doLogin()">로그인</button>
+        <p class="login-link">계정이 없으신가요? <a href="/" onclick="window.location.href='/';return true;">회원가입</a></p>
+        <p style="text-align:center;font-size:10px;color:var(--text3);margin-top:12px;">(주)다인온 · BizConnect</p>
+    </div>
+</div>
+
+<!-- App -->
+<div id="appPage" style="display:none">
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a href="/portal" class="logo-sm">Biz<span>Connect</span></a>
+            <nav class="tabs">
+                <button class="tab active" data-page="sms" onclick="navigate('sms')">문자 보내기</button>
+                <button class="tab" data-page="contacts" onclick="navigate('contacts')">연락처</button>
+                <button class="tab" data-page="templates" onclick="navigate('templates')">템플릿</button>
+                <button class="tab" data-page="history" onclick="navigate('history')">발송 이력</button>
+                <button class="tab" data-page="account" onclick="navigate('account')">내 계정</button>
+            </nav>
+            <button class="btn-logout" onclick="doLogout()">로그아웃</button>
+        </div>
+    </header>
+
+    <main id="content" class="content"></main>
+</div>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="/portal/portal.js"></script>
+</body>
+</html>

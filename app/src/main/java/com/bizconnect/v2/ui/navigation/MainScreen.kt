@@ -52,11 +52,13 @@ import com.bizconnect.v2.ui.business.MessageTemplateScreen
 import com.bizconnect.v2.ui.business.PricingScreen
 import com.bizconnect.v2.ui.business.ScheduleCreateScreen
 import com.bizconnect.v2.ui.business.ScheduledMessagesScreen
+import com.bizconnect.v2.ui.business.SendHistoryScreen
 import com.bizconnect.v2.ui.business.SpamManagementScreen
 import com.bizconnect.v2.ui.compose.ComposeMessageScreen
 import com.bizconnect.v2.ui.contacts.ContactsScreen
 import com.bizconnect.v2.ui.conversation.ConversationListScreen
 import com.bizconnect.v2.ui.message.MessageDetailScreen
+import com.bizconnect.v2.ui.payment.PaymentScreen
 import com.bizconnect.v2.ui.settings.AdminSettingsScreen
 import com.bizconnect.v2.ui.settings.SettingsScreen
 
@@ -184,6 +186,7 @@ fun MainScreen() {
                     onCustomerManagementClick = { navController.navigate("customer_management") },
                     onSpamManagementClick = { navController.navigate("spam_management") },
                     onMessageTemplateClick = { navController.navigate("message_templates") },
+                    onHistoryClick = { navController.navigate("send_history") },
                     onAiSettingsClick = { navController.navigate("ai_settings") },
                     onSettingsClick = { navController.navigate("settings") },
                     onPricingClick = { navController.navigate("pricing") },
@@ -225,7 +228,8 @@ fun MainScreen() {
                 SettingsScreen(
                     onBackClick = { navController.popBackStack() },
                     onSpamClick = { navController.navigate("spam_management") },
-                    onAdminClick = { navController.navigate("admin_settings") }
+                    onAdminClick = { navController.navigate("admin_settings") },
+                    onLoginClick = { navController.navigate("login") }
                 )
             }
 
@@ -299,15 +303,50 @@ fun MainScreen() {
                 )
             }
 
+            composable("send_history") {
+                SendHistoryScreen(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
             composable("pricing") {
                 PricingScreen(
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
+                    onPaymentClick = { amount, goodsName, paymentType, payMethod ->
+                        navController.navigate("payment/$amount/${android.net.Uri.encode(goodsName)}/$paymentType/$payMethod")
+                    }
                 )
             }
 
             composable("ai_settings") {
                 AiSettingsScreen(
                     onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            // Payment screen
+            composable(
+                route = "payment/{amount}/{goodsName}/{paymentType}/{payMethod}",
+                arguments = listOf(
+                    navArgument("amount") { type = NavType.IntType },
+                    navArgument("goodsName") { type = NavType.StringType },
+                    navArgument("paymentType") { type = NavType.StringType },
+                    navArgument("payMethod") { type = NavType.StringType; defaultValue = "card" }
+                )
+            ) { backStackEntry ->
+                val amount = backStackEntry.arguments?.getInt("amount") ?: 0
+                val goodsName = backStackEntry.arguments?.getString("goodsName") ?: ""
+                val paymentType = backStackEntry.arguments?.getString("paymentType") ?: "credit_charge"
+                val payMethod = backStackEntry.arguments?.getString("payMethod") ?: "card"
+                PaymentScreen(
+                    amount = amount,
+                    goodsName = goodsName,
+                    paymentType = paymentType,
+                    payMethod = payMethod,
+                    onPaymentComplete = { success, _, _ ->
+                        navController.popBackStack()
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
 

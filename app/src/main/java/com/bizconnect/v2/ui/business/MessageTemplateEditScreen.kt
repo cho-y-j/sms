@@ -286,7 +286,7 @@ fun MessageTemplateEditScreen(
                     // Image preview
                     Box(modifier = Modifier.padding(bottom = 8.dp)) {
                         AsyncImage(
-                            model = Uri.parse(editImageUri!!),
+                            model = Uri.parse(editImageUri ?: ""),
                             contentDescription = "첨부 이미지",
                             modifier = Modifier
                                 .fillMaxWidth()

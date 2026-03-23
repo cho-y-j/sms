@@ -56,6 +56,7 @@ private val SamsungBlue = Color(0xFF0381FE)
 @Composable
 fun PricingScreen(
     onBackClick: () -> Unit,
+    onPaymentClick: ((amount: Int, goodsName: String, paymentType: String, payMethod: String) -> Unit)? = null,
     viewModel: BusinessHomeViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -63,6 +64,7 @@ fun PricingScreen(
 
     var selectedPlan by remember { mutableStateOf("free") }
     var selectedChargeAmount by remember { mutableIntStateOf(0) }
+    var selectedPaymentMethod by remember { mutableStateOf("card") }
 
     Scaffold(
         topBar = {
@@ -109,18 +111,72 @@ fun PricingScreen(
 
             // Paid plan
             PlanCard(
-                planName = "유료",
-                description = "150건/일, 모든 기능",
+                planName = "유료 (Business)",
+                description = "149건/일, 모든 기능",
                 price = "₩4,900/월",
                 isSelected = selectedPlan == "paid",
                 onClick = { selectedPlan = "paid" }
             )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Premium plan
+            PlanCard(
+                planName = "프리미엄 (Premium)",
+                description = "149건/일, API/웹훅, 우선지원",
+                price = "₩9,900/월",
+                isSelected = selectedPlan == "premium",
+                onClick = { selectedPlan = "premium" }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 결제 수단 선택
+            Text(
+                text = "결제 수단",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "card" to "카드",
+                    "kakaopay" to "카카오페이",
+                    "naverpay" to "네이버페이"
+                ).forEach { (method, label) ->
+                    OutlinedButton(
+                        onClick = { selectedPaymentMethod = method },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (selectedPaymentMethod == method) SamsungBlue.copy(alpha = 0.1f) else Color.Transparent,
+                            contentColor = if (selectedPaymentMethod == method) SamsungBlue else MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = {
-                    Toast.makeText(context, "추후 결제 연동 예정", Toast.LENGTH_SHORT).show()
+                    if (selectedPlan == "free") {
+                        Toast.makeText(context, "무료 플랜은 결제가 필요 없습니다", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val amount = if (selectedPlan == "premium") 9900 else 4900
+                        val name = if (selectedPlan == "premium") "BizConnect Premium 구독" else "BizConnect Business 구독"
+                        if (onPaymentClick != null) {
+                            onPaymentClick(amount, name, "subscription", selectedPaymentMethod)
+                        } else {
+                            Toast.makeText(context, "결제 화면으로 이동합니다", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 },
+                enabled = selectedPlan != "free",
                 colors = ButtonDefaults.buttonColors(containerColor = SamsungBlue),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -190,7 +246,10 @@ fun PricingScreen(
 
             Button(
                 onClick = {
-                    Toast.makeText(context, "추후 결제 연동 예정", Toast.LENGTH_SHORT).show()
+                    if (selectedChargeAmount > 0 && onPaymentClick != null) {
+                        val name = "크레딧 ${numberFormat.format(selectedChargeAmount)}원 충전"
+                        onPaymentClick(selectedChargeAmount, name, "credit_charge", selectedPaymentMethod)
+                    }
                 },
                 enabled = selectedChargeAmount > 0,
                 colors = ButtonDefaults.buttonColors(containerColor = SamsungBlue),

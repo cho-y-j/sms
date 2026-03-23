@@ -141,7 +141,9 @@ class SmsSyncManager @Inject constructor(
         Log.d(TAG, "Starting incremental sync since $lastSync")
 
         try {
-            val smsMessages = readSmsFromProvider(sinceTimestamp = lastSync)
+            // 최근 2초 이내 메시지는 건너뛰기 (SmsSender 중복 방지)
+            val cutoffTime = System.currentTimeMillis() - 2000
+            val smsMessages = readSmsFromProvider(sinceTimestamp = lastSync).filter { it.timestamp < cutoffTime }
             val mmsMessages = readMmsFromProvider(sinceTimestamp = lastSync)
             val messages = smsMessages + mmsMessages
             Log.d(TAG, "Read ${smsMessages.size} SMS + ${mmsMessages.size} MMS = ${messages.size} new messages")

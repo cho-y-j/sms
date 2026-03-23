@@ -73,7 +73,7 @@ fun AiMessageGenerateDialog(
 
                 if (error != null) {
                     Text(
-                        text = error!!,
+                        text = error ?: "",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp)
@@ -89,7 +89,7 @@ fun AiMessageGenerateDialog(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
-                        value = generatedText!!,
+                        value = generatedText ?: "",
                         onValueChange = { generatedText = it },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -103,7 +103,7 @@ fun AiMessageGenerateDialog(
             if (generatedText != null) {
                 Button(
                     onClick = {
-                        onGenerated(generatedText!!)
+                        onGenerated(generatedText ?: return@Button)
                         onDismiss()
                     }
                 ) {

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Sms
@@ -50,6 +51,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import okhttp3.MediaType.Companion.toMediaType
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +80,7 @@ fun SettingsScreen(
     onBackClick: () -> Unit = {},
     onSpamClick: () -> Unit = {},
     onAdminClick: () -> Unit = {},
+    onLoginClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -96,6 +111,84 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            // === 계정 상태 ===
+            val isLoggedIn = viewModel.isLoggedIn()
+            val userName = viewModel.getUserName()
+            val userTier = viewModel.getUserTier()
+
+            if (isLoggedIn) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            SamsungBlue.copy(alpha = 0.08f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = SamsungBlue,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = userName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = when (userTier) {
+                                "premium" -> "Premium 회원"
+                                "paid" -> "Business 회원"
+                                else -> "무료 회원"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SamsungBlue
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "로그인되지 않음",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.material3.Button(
+                            onClick = onLoginClick,
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = SamsungBlue),
+                            modifier = Modifier.fillMaxWidth().height(40.dp)
+                        ) {
+                            Text("로그인 / 회원가입", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // === 디스플레이 ===
             SettingsSectionHeader("디스플레이")
 
@@ -202,6 +295,104 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // === 웹 연동 ===
+            var showSyncDialog by remember { mutableStateOf(false) }
+
+            if (isLoggedIn) {
+                SettingsSectionHeader("웹 연동")
+
+                SettingsItem(
+                    icon = Icons.Default.Person,
+                    title = "연락처 웹 동기화",
+                    subtitle = "폰 연락처를 웹에서 사용할 수 있게 업로드",
+                    onClick = { showSyncDialog = true }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // 동기화 확인 다이얼로그
+            if (showSyncDialog) {
+                AlertDialog(
+                    onDismissRequest = { showSyncDialog = false },
+                    title = { Text("연락처 웹 동기화") },
+                    text = { Text("폰에 저장된 연락처를 웹(sm.on1.kr)에 업로드합니다.\n\n웹에서 문자 발송 시 연락처를 사용할 수 있습니다.\n\n진행하시겠습니까?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showSyncDialog = false
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val accessToken = viewModel.getAccessToken()
+                                if (accessToken.isNullOrBlank()) return@launch
+
+                                val cursor = context.contentResolver.query(
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                                    arrayOf(
+                                        android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                                        android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER
+                                    ), null, null, null
+                                )
+
+                                val contacts = mutableListOf<org.json.JSONObject>()
+                                val seenPhones = mutableSetOf<String>()
+                                cursor?.use {
+                                    while (it.moveToNext()) {
+                                        val n = it.getString(0) ?: continue
+                                        val p = it.getString(1)?.replace(Regex("[^0-9+]"), "") ?: continue
+                                        if (p.length < 10 || seenPhones.contains(p)) continue
+                                        seenPhones.add(p)
+                                        contacts.add(org.json.JSONObject().apply {
+                                            put("name", n); put("phone", p)
+                                        })
+                                    }
+                                }
+
+                                val payload = org.json.JSONObject().put("contacts", org.json.JSONArray(contacts))
+                                val request = okhttp3.Request.Builder()
+                                    .url("https://sm.on1.kr/api/user/contacts/import")
+                                    .addHeader("Authorization", "Bearer $accessToken")
+                                    .post(okhttp3.RequestBody.create(
+                                        "application/json".toMediaType(), payload.toString()))
+                                    .build()
+                                val resp = okhttp3.OkHttpClient().newCall(request).execute()
+                                val body = resp.body?.string() ?: ""
+                                resp.close()
+
+                                                withContext(Dispatchers.Main) {
+                                    val imported = try { org.json.JSONObject(body).optString("imported", "0") } catch (_: Exception) { "0" }
+                                    val existing = contacts.size - imported.toIntOrNull().let { it ?: 0 }
+                                    val msg = if (imported == "0") "모든 연락처가 이미 동기화되어 있습니다 (${contacts.size}건)"
+                                        else "신규 ${imported}건 추가 완료 (기존 ${existing}건은 이미 동기화됨)"
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    android.widget.Toast.makeText(context, "동기화 실패: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }) { Text("동기화", color = SamsungBlue) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showSyncDialog = false }) { Text("취소") }
+                    }
+                )
+            }
+
+            // === 개인정보 ===
+            SettingsSectionHeader("개인정보")
+
+            SettingsItem(
+                icon = Icons.Default.Info,
+                title = "개인정보처리방침",
+                subtitle = "(주)다인온",
+                onClick = {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://sm.on1.kr/privacy"))
+                    context.startActivity(intent)
+                }
+            )
+
             // === 비즈니스 ===
             SettingsSectionHeader("비즈니스")
 
@@ -257,24 +448,31 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // === 관리자 ===
-            SettingsSectionHeader("관리자")
+            // === 관리자 (admin 역할만) ===
+            if (isLoggedIn && viewModel.getUserRole() == "admin") {
+                SettingsSectionHeader("관리자")
+                SettingsItem(
+                    icon = Icons.Default.Build,
+                    title = "관리자 설정",
+                    subtitle = "단가, 한도, 구독 관리",
+                    onClick = onAdminClick
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            }
 
-            SettingsItem(
-                icon = Icons.Default.Build,
-                title = "관리자 설정",
-                subtitle = "단가, 한도, 구독 관리",
-                onClick = onAdminClick
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            SettingsItem(
-                icon = Icons.Default.Logout,
-                title = "로그아웃",
-                subtitle = "계정에서 로그아웃",
-                isDestructive = true
-            )
+            // === 로그아웃 (로그인 시에만) ===
+            if (isLoggedIn) {
+                SettingsItem(
+                    icon = Icons.Default.Logout,
+                    title = "로그아웃",
+                    subtitle = "계정에서 로그아웃",
+                    isDestructive = true,
+                    onClick = {
+                        viewModel.logout()
+                        android.widget.Toast.makeText(context, "로그아웃 되었습니다", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
         }

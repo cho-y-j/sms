@@ -57,9 +57,11 @@ RUN apt-get update && \
 
 COPY --from=builder /app/server/build/libs/server-all.jar server.jar
 
-# Set secure permissions
+# Set secure permissions + uploads directory
 RUN chmod 600 server.jar && \
-    chown bizconnect:bizconnect server.jar
+    chown bizconnect:bizconnect server.jar && \
+    mkdir -p /app/uploads && \
+    chown bizconnect:bizconnect /app/uploads
 
 # Environment variables (override via docker-compose)
 ENV SERVER_PORT=8080 \

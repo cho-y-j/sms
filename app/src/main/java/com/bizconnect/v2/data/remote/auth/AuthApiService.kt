@@ -18,7 +18,7 @@ class AuthApiService @Inject constructor(
     private val appPreferences: AppPreferences
 ) {
     companion object {
-        private const val BASE_URL = "http://192.168.0.9:8090"
+        private const val BASE_URL = "https://sm.on1.kr"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 
@@ -84,7 +84,8 @@ class AuthApiService @Inject constructor(
                 AuthResult(success = true, token = token, userId = userId)
             } else {
                 val errorMsg = try {
-                    JSONObject(responseBody).optString("message", "로그인에 실패했습니다")
+                    val errJson = JSONObject(responseBody)
+                    errJson.optString("error", errJson.optString("message", "로그인에 실패했습니다"))
                 } catch (_: Exception) {
                     "로그인에 실패했습니다 (${response.code})"
                 }
@@ -133,7 +134,8 @@ class AuthApiService @Inject constructor(
                 AuthResult(success = true, token = token, userId = userId)
             } else {
                 val errorMsg = try {
-                    JSONObject(responseBody).optString("message", "회원가입에 실패했습니다")
+                    val errJson = JSONObject(responseBody)
+                    errJson.optString("error", errJson.optString("message", "회원가입에 실패했습니다"))
                 } catch (_: Exception) {
                     "회원가입에 실패했습니다 (${response.code})"
                 }
