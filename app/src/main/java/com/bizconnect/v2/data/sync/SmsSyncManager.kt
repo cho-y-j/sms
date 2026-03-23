@@ -137,32 +137,36 @@ class SmsSyncManager @Inject constructor(
 
     suspend fun performIncrementalSync() {
         val prefs = dataStore.data.first()
-        val lastSync = prefs[KEY_LAST_SYNC_TIMESTAMP] ?: 0L
-        Log.d(TAG, "Starting incremental sync since $lastSync")
+        var lastSync = prefs[KEY_LAST_SYNC_TIMESTAMP] ?: 0L
+
+        // 기본 앱이 아닐 때는 최근 24시간 메시지를 전체 비교 (다른 앱이 수신 처리)
+        val isDefaultApp = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+        if (!isDefaultApp) {
+            lastSync = System.currentTimeMillis() - 86400_000 // 24시간 전부터
+        }
+        Log.d(TAG, "Starting incremental sync since $lastSync (default=$isDefaultApp)")
 
         try {
-            // 최근 2초 이내 메시지는 건너뛰기 (SmsSender 중복 방지)
-            val cutoffTime = System.currentTimeMillis() - 2000
-            val smsMessages = readSmsFromProvider(sinceTimestamp = lastSync).filter { it.timestamp < cutoffTime }
+            val smsMessages = readSmsFromProvider(sinceTimestamp = lastSync)
             val mmsMessages = readMmsFromProvider(sinceTimestamp = lastSync)
-            val messages = smsMessages + mmsMessages
-            Log.d(TAG, "Read ${smsMessages.size} SMS + ${mmsMessages.size} MMS = ${messages.size} new messages")
+            val rcsMessages = readRcsFromProvider(sinceTimestamp = lastSync)
+            val messages = smsMessages + mmsMessages + rcsMessages
+            Log.d(TAG, "Read ${smsMessages.size} SMS + ${mmsMessages.size} MMS + ${rcsMessages.size} RCS = ${messages.size} new messages")
 
             if (messages.isEmpty()) return
 
             // Filter out messages already in Room DB
             val newMessages = messages.filter { msg ->
-                // 1. Check by systemSmsId
-                if (msg.systemSmsId != 0L && messageDao.getBySystemSmsId(msg.systemSmsId) != null) {
-                    return@filter false
+                // 1차: systemSmsId로 중복 체크
+                if (msg.systemSmsId != 0L) {
+                    val existing = messageDao.getBySystemSmsId(msg.systemSmsId)
+                    if (existing != null) return@filter false
                 }
-                // 2. Check by content: same thread + same body + timestamp within 2 minutes
+                // 2차: 같은 threadId에서 body(10자) + 30초 이내 → 중복
                 val existingInThread = messageDao.getMessagesByThreadDirect(msg.threadId)
-                val msgBody = msg.body?.take(30) ?: ""
                 val isDuplicate = existingInThread.any { existing ->
-                    val bodyMatch = (existing.body?.take(30) ?: "") == msgBody
-                    val timeClose = Math.abs(existing.timestamp - msg.timestamp) < 120_000 // 2분
-                    bodyMatch && timeClose
+                    Math.abs(existing.timestamp - msg.timestamp) < 30000 &&
+                    (existing.body?.take(10) ?: "") == (msg.body?.take(10) ?: "")
                 }
                 !isDuplicate
             }
@@ -315,6 +319,66 @@ class SmsSyncManager @Inject constructor(
                     )
                 )
             }
+        }
+        return messages
+    }
+
+    /**
+     * 삼성 RCS/채팅 메시지 읽기 (content://im/chat)
+     * 삼성 기기에서 RCS로 수신된 메시지는 content://sms에 없고 content://im/chat에 있음
+     */
+    private fun readRcsFromProvider(sinceTimestamp: Long?): List<MessageEntity> {
+        val messages = mutableListOf<MessageEntity>()
+        try {
+            val uri = Uri.parse("content://im/chat")
+            val selection = if (sinceTimestamp != null) "date > ?" else null
+            val selectionArgs = if (sinceTimestamp != null) arrayOf(sinceTimestamp.toString()) else null
+
+            context.contentResolver.query(
+                uri,
+                arrayOf("_id", "thread_id", "address", "body", "date", "type", "message_type"),
+                selection,
+                selectionArgs,
+                "date ASC"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndexOrThrow("_id")
+                val threadIdx = cursor.getColumnIndexOrThrow("thread_id")
+                val addressIdx = cursor.getColumnIndexOrThrow("address")
+                val bodyIdx = cursor.getColumnIndexOrThrow("body")
+                val dateIdx = cursor.getColumnIndexOrThrow("date")
+                val typeIdx = cursor.getColumnIndexOrThrow("type")
+
+                while (cursor.moveToNext()) {
+                    val address = cursor.getString(addressIdx) ?: continue
+                    val body = cursor.getString(bodyIdx)
+                    val timestamp = cursor.getLong(dateIdx)
+                    val type = cursor.getInt(typeIdx) // 1=received, 2=sent
+                    val systemId = cursor.getLong(idIdx)
+                    val threadId = cursor.getLong(threadIdx)
+
+                    // threadId를 SMS와 통합하기 위해 재생성
+                    val unifiedThreadId = try {
+                        Telephony.Threads.getOrCreateThreadId(context, address)
+                    } catch (e: Exception) {
+                        address.hashCode().toLong() and 0x7FFFFFFFL
+                    }
+
+                    messages.add(MessageEntity(
+                        threadId = unifiedThreadId,
+                        address = address,
+                        body = body,
+                        timestamp = timestamp,
+                        type = type,
+                        read = type == 2, // sent = read
+                        seen = type == 2,
+                        systemSmsId = systemId + 1_000_000_000L, // RCS ID에 오프셋 추가 (SMS ID와 충돌 방지)
+                        status = Telephony.Sms.STATUS_COMPLETE
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            // content://im/chat은 삼성 기기에서만 사용 가능
+            Log.d(TAG, "RCS provider not available: ${e.message}")
         }
         return messages
     }

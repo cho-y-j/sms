@@ -611,13 +611,35 @@ fun Route.userPortalRoutes(smsService: WideshotSmsService) {
                 val cleanBase64 = base64Data.substringAfter(",") // data:image/png;base64, 제거
                 val fileBytes = java.util.Base64.getDecoder().decode(cleanBase64)
 
-                // 이미지 저장 (Docker 볼륨 - 영구 저장)
-                val uploadDir = java.io.File("/app/uploads")
-                uploadDir.mkdirs()
-                java.io.File(uploadDir, fileName).writeBytes(fileBytes)
-
-                val publicUrl = "https://sm.on1.kr/uploads/$fileName"
+                // S3 업로드 (호스트 프록시 경유)
+                var publicUrl = "https://sm.on1.kr/uploads/$fileName"
                 val previewUrl = "https://sm.on1.kr/i/$fileName"
+                try {
+                    val hexData = fileBytes.joinToString("") { "%02x".format(it) }
+                    val contentType = when (ext.lowercase()) {
+                        "png" -> "image/png"; "gif" -> "image/gif"
+                        "webp" -> "image/webp"; else -> "image/jpeg"
+                    }
+                    val s3Payload = """{"fileName":"$fileName","hexData":"$hexData","contentType":"$contentType"}"""
+                    val s3Conn = java.net.URL("http://172.17.0.1:9878").openConnection() as java.net.HttpURLConnection
+                    s3Conn.requestMethod = "POST"
+                    s3Conn.setRequestProperty("Content-Type", "application/json")
+                    s3Conn.doOutput = true
+                    s3Conn.connectTimeout = 10000
+                    s3Conn.readTimeout = 10000
+                    s3Conn.outputStream.write(s3Payload.toByteArray())
+                    if (s3Conn.responseCode == 200) {
+                        val s3Resp = s3Conn.inputStream.bufferedReader().readText()
+                        val s3Url = kotlinx.serialization.json.Json.parseToJsonElement(s3Resp).jsonObject["publicUrl"]?.jsonPrimitive?.contentOrNull
+                        if (s3Url != null) publicUrl = s3Url
+                    }
+                    s3Conn.disconnect()
+                } catch (e: Exception) {
+                    // S3 실패 → 로컬 폴백
+                    val uploadDir = java.io.File("/app/uploads")
+                    uploadDir.mkdirs()
+                    java.io.File(uploadDir, fileName).writeBytes(fileBytes)
+                }
 
                 call.respond(HttpStatusCode.OK, mapOf(
                     "fileName" to fileName,

@@ -62,7 +62,7 @@ fun PricingScreen(
     val context = LocalContext.current
     val numberFormat = NumberFormat.getNumberInstance(Locale.KOREA)
 
-    var selectedPlan by remember { mutableStateOf("free") }
+    var selectedPlan by remember { mutableStateOf(viewModel.subscriptionTier) }
     var selectedChargeAmount by remember { mutableIntStateOf(0) }
     var selectedPaymentMethod by remember { mutableStateOf("card") }
 
@@ -99,12 +99,15 @@ fun PricingScreen(
             SectionHeader(title = "구독 플랜")
             Spacer(modifier = Modifier.height(12.dp))
 
+            val currentTier = viewModel.subscriptionTier
+
             // Free plan
             PlanCard(
                 planName = "무료",
                 description = "50건/일, 기본 기능",
                 price = null,
                 isSelected = selectedPlan == "free",
+                isCurrent = currentTier == "free",
                 onClick = { selectedPlan = "free" }
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -115,6 +118,7 @@ fun PricingScreen(
                 description = "149건/일, 모든 기능",
                 price = "₩4,900/월",
                 isSelected = selectedPlan == "paid",
+                isCurrent = currentTier == "paid",
                 onClick = { selectedPlan = "paid" }
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -125,6 +129,7 @@ fun PricingScreen(
                 description = "149건/일, API/웹훅, 우선지원",
                 price = "₩9,900/월",
                 isSelected = selectedPlan == "premium",
+                isCurrent = currentTier == "premium",
                 onClick = { selectedPlan = "premium" }
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -142,9 +147,9 @@ fun PricingScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
-                    "card" to "카드",
-                    "kakaopay" to "카카오페이",
-                    "naverpay" to "네이버페이"
+                    "card" to "💳 카드",
+                    "kakaopay" to "🟡 카카오",
+                    "naverpay" to "🟢 네이버"
                 ).forEach { (method, label) ->
                     OutlinedButton(
                         onClick = { selectedPaymentMethod = method },
@@ -153,9 +158,17 @@ fun PricingScreen(
                             contentColor = if (selectedPaymentMethod == method) SamsungBlue else MaterialTheme.colorScheme.onSurface
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
                     ) {
-                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            label,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
@@ -277,7 +290,11 @@ fun PricingScreen(
                     .padding(16.dp)
             ) {
                 Column {
-                    val tierDisplay = if (viewModel.subscriptionTier == "paid") "유료" else "무료"
+                    val tierDisplay = when (viewModel.subscriptionTier) {
+                        "premium" -> "프리미엄"
+                        "paid" -> "유료 (Business)"
+                        else -> "무료"
+                    }
                     val balanceText = numberFormat.format(viewModel.creditBalance.toLong())
                     StatusRow("현재 구독", tierDisplay)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -306,6 +323,7 @@ private fun PlanCard(
     description: String,
     price: String?,
     isSelected: Boolean,
+    isCurrent: Boolean = false,
     onClick: () -> Unit
 ) {
     val borderColor = if (isSelected) SamsungBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
@@ -327,12 +345,26 @@ private fun PlanCard(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = planName,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = planName,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (isCurrent) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "현재",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(SamsungBlue, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
             Text(
                 text = description,
                 fontSize = 13.sp,

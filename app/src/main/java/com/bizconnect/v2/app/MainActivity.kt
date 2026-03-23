@@ -150,11 +150,16 @@ class MainActivity : ComponentActivity() {
         contentObserver = object : ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
                 val now = System.currentTimeMillis()
-                if (now - lastSyncTime < 3000) return // 3초 디바운스
+                if (now - lastSyncTime < 1000) return // 1초 디바운스 (SmsSender가 Room에 systemSmsId 포함 저장하므로 레이스 컨디션 해결됨)
                 lastSyncTime = now
                 Log.d("MainActivity", "Content change detected → syncing")
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // 기본 앱이 아니면 약간 대기 (삼성 메시지가 먼저 저장하도록)
+                        val isDefault = android.provider.Telephony.Sms.getDefaultSmsPackage(applicationContext) == packageName
+                        if (!isDefault) {
+                            kotlinx.coroutines.delay(500) // 0.5초 대기
+                        }
                         smsSyncManager.performIncrementalSync()
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Sync error", e)
@@ -163,12 +168,20 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Watch both SMS and MMS changes
+        // Watch SMS, MMS, and RCS changes
         contentResolver.registerContentObserver(
             Uri.parse("content://mms-sms/"),
             true,
             contentObserver ?: return
         )
+        // 삼성 RCS 메시지 감시
+        try {
+            contentResolver.registerContentObserver(
+                Uri.parse("content://im/chat"),
+                true,
+                contentObserver ?: return
+            )
+        } catch (_: Exception) { }
     }
 
     override fun onDestroy() {

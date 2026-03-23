@@ -169,13 +169,59 @@ class SmsSender @Inject constructor(
                 phoneNumber.hashCode().toLong() and 0x7FFFFFFFL
             }
 
-            // 1. DB에 먼저 저장 → UI에 즉시 표시
+            // 1. 실제 발송
+            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                context.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+
+            val byteLen = message.toByteArray(Charsets.UTF_8).size
+            if (byteLen > 90) {
+                // 장문 → MMS(LMS)로 한번에 전송
+                Log.d(TAG, "Long message ($byteLen bytes) → sending as LMS via MMS")
+                val mmsc = getKoreanCarrierMmsc()
+                if (mmsc != null) {
+                    val pduBytes = buildMmsPduWithImage(phone, message, byteArrayOf())
+                    sendPduViaHttp(pduBytes, mmsc)
+                } else {
+                    // MMSC 없으면 멀티파트 SMS 폴백
+                    val parts = smsManager.divideMessage(message)
+                    smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                }
+            } else {
+                smsManager.sendTextMessage(phone, null, message, null, null)
+            }
+
+            // 2. 시스템 Provider에 저장 (systemSmsId 획득)
+            var systemSmsId = 0L
+            if (isDefaultSmsApp()) {
+                try {
+                    val smsUri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, ContentValues().apply {
+                        put(Telephony.Sms.ADDRESS, phoneNumber)
+                        put(Telephony.Sms.BODY, message)
+                        put(Telephony.Sms.DATE, timestamp)
+                        put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+                        put(Telephony.Sms.READ, 1)
+                        put(Telephony.Sms.SEEN, 1)
+                        put(Telephony.Sms.THREAD_ID, threadId)
+                    })
+                    systemSmsId = smsUri?.lastPathSegment?.toLongOrNull() ?: 0L
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not write to system provider", e)
+                }
+            }
+
+            // 3. Room DB에 저장 (systemSmsId 포함 → ContentObserver 중복 방지)
             val msgId = messageDao.insert(MessageEntity(
                 threadId = threadId, address = phoneNumber, body = message,
                 timestamp = timestamp, type = Telephony.Sms.MESSAGE_TYPE_SENT,
-                read = true, seen = true, status = Telephony.Sms.STATUS_PENDING
+                read = true, seen = true, status = Telephony.Sms.STATUS_COMPLETE,
+                systemSmsId = systemSmsId
             ))
 
+            // 4. 대화 업데이트
             val contactName = contactDao.getByPhone(phoneNumber)?.name ?: lookupContactName(phoneNumber)
             val existing = conversationDao.getByIdSync(threadId)
             if (existing != null) {
@@ -191,58 +237,7 @@ class SmsSender @Inject constructor(
                 ))
             }
 
-            // 2. 실제 발송 (백그라운드)
-            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                context.getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            }
-
-            val parts = smsManager.divideMessage(message)
-            var sentAsMms = false
-
-            if (parts.size > 1) {
-                // 장문은 멀티파트 SMS로 발송 (MMS HTTP 시도 제거 - 느림 방지)
-                Log.d(TAG, "Long message (${message.length} chars, ${parts.size} parts) → multipart SMS")
-                smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
-            } else {
-                smsManager.sendTextMessage(phone, null, message, null, null)
-            }
-
-            // 3. 발송 완료 후 상태 업데이트
-            var systemSmsId = 0L
-            if (isDefaultSmsApp()) {
-                try {
-                    if (sentAsMms) {
-                        saveSentMmsToProvider(phoneNumber, message, threadId, timestamp)
-                    } else {
-                        val smsUri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, ContentValues().apply {
-                            put(Telephony.Sms.ADDRESS, phoneNumber)
-                            put(Telephony.Sms.BODY, message)
-                            put(Telephony.Sms.DATE, timestamp)
-                            put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
-                            put(Telephony.Sms.READ, 1)
-                            put(Telephony.Sms.SEEN, 1)
-                            put(Telephony.Sms.THREAD_ID, threadId)
-                        })
-                        systemSmsId = smsUri?.lastPathSegment?.toLongOrNull() ?: 0L
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not write to system provider", e)
-                }
-            }
-
-            // 발송 완료 상태로 업데이트
-            messageDao.getById(msgId)?.let { msg ->
-                messageDao.update(msg.copy(
-                    isMms = sentAsMms,
-                    systemSmsId = systemSmsId,
-                    status = Telephony.Sms.STATUS_COMPLETE
-                ))
-            }
-
-            Log.d(TAG, "Message sent to $phoneNumber (mms=$sentAsMms)")
+            Log.d(TAG, "Message sent to $phoneNumber (systemSmsId=$systemSmsId)")
             threadId
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send to $phoneNumber", e)
@@ -274,17 +269,43 @@ class SmsSender @Inject constructor(
             val permanentPath = copyImageToInternal(imageUri)
             val savedImagePath = permanentPath ?: imageUri.toString()
 
-            // 1. DB에 먼저 저장 → UI에 즉시 표시 (이미지 포함)
+            // 1. 실제 발송
+            Log.d(TAG, "Sending MMS with image to $phone")
+            val mmsc = getKoreanCarrierMmsc()
+            var sent = false
+            if (mmsc != null) {
+                val imageBytes = compressImageWithExif(imageUri)
+                if (imageBytes != null) {
+                    val pduBytes = buildMmsPduWithImage(phone, text, imageBytes)
+                    sent = sendPduViaHttp(pduBytes, mmsc)
+                }
+            }
+
+            if (!sent) {
+                Log.w(TAG, "MMS with image FAILED to $phoneNumber")
+                return -1L
+            }
+
+            // 2. 시스템 Provider에 저장 (systemMmsId 획득)
+            var systemMmsId = 0L
+            if (isDefaultSmsApp()) {
+                try { systemMmsId = saveSentMmsToProvider(phoneNumber, displayText, threadId, timestamp) }
+                catch (e: Exception) { Log.w(TAG, "Save MMS provider failed", e) }
+            }
+
+            // 3. Room DB에 저장 (systemSmsId 포함 → 중복 방지)
             val msgId = messageDao.insert(MessageEntity(
                 threadId = threadId, address = phoneNumber,
                 body = displayText,
                 timestamp = timestamp, type = Telephony.Sms.MESSAGE_TYPE_SENT,
                 read = true, seen = true, isMms = true,
-                status = Telephony.Sms.STATUS_PENDING,
+                status = Telephony.Sms.STATUS_COMPLETE,
                 attachmentPath = savedImagePath,
-                attachmentMimeType = "image/jpeg"
+                attachmentMimeType = "image/jpeg",
+                systemSmsId = if (systemMmsId > 0) systemMmsId + 1_000_000_000L else 0L
             ))
 
+            // 4. 대화 업데이트
             val contactName = contactDao.getByPhone(phoneNumber)?.name ?: lookupContactName(phoneNumber)
             val existing = conversationDao.getByIdSync(threadId)
             if (existing != null) {
@@ -303,42 +324,8 @@ class SmsSender @Inject constructor(
                 ))
             }
 
-            // 2. 실제 발송 (백그라운드)
-            Log.d(TAG, "Sending MMS with image to $phone")
-            val mmsc = getKoreanCarrierMmsc()
-            var sent = false
-            if (mmsc != null) {
-                val imageBytes = compressImage(imageUri)
-                if (imageBytes != null) {
-                    val pduBytes = buildMmsPduWithImage(phone, text, imageBytes)
-                    sent = sendPduViaHttp(pduBytes, mmsc)
-                }
-            }
-
-            // 3. 발송 완료 상태 업데이트
-            var systemMmsId = 0L
-            if (isDefaultSmsApp()) {
-                try { systemMmsId = saveSentMmsToProvider(phoneNumber, displayText, threadId, timestamp) }
-                catch (e: Exception) { Log.w(TAG, "Save MMS provider failed", e) }
-            }
-
-            if (sent) {
-                messageDao.getById(msgId)?.let { msg ->
-                    messageDao.update(msg.copy(
-                        status = Telephony.Sms.STATUS_COMPLETE,
-                        systemSmsId = if (systemMmsId > 0) systemMmsId + 1_000_000_000 else 0L
-                    ))
-                }
-                Log.d(TAG, "MMS with image sent to $phoneNumber (success=true)")
-                threadId
-            } else {
-                // MMS 발송 실패 → DB에서 제거하고 -1 반환 (호출자가 SMS 폴백 가능)
-                messageDao.getById(msgId)?.let { msg ->
-                    messageDao.update(msg.copy(status = Telephony.Sms.STATUS_FAILED))
-                }
-                Log.w(TAG, "MMS with image FAILED to $phoneNumber, returning -1 for fallback")
-                -1L
-            }
+            Log.d(TAG, "MMS with image sent to $phoneNumber")
+            threadId
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send MMS with image", e)
             -1L
@@ -360,17 +347,40 @@ class SmsSender @Inject constructor(
             }
             val displayText = text.ifEmpty { "[사진 ${imageUris.size}장]" }
 
-            // 1. DB에 먼저 저장 → UI 즉시 표시
+            // 1. 이미지 압축 + 발송
+            val maxPerImage = 280_000 / imageUris.size
+            val compressedImages = imageUris.mapNotNull { uri -> compressImage(uri, maxPerImage) }
+            Log.d(TAG, "Compressed ${compressedImages.size} images, total ${compressedImages.sumOf { it.size }} bytes")
+
+            val mmsc = getKoreanCarrierMmsc()
+            var sent = false
+            if (mmsc != null && compressedImages.isNotEmpty()) {
+                val pduBytes = buildMmsPduWithMultipleImages(phoneNumber, text, compressedImages)
+                sent = sendPduViaHttp(pduBytes, mmsc)
+            }
+
+            if (!sent) return -1L
+
+            // 2. 시스템 Provider 저장
+            var systemMmsId = 0L
+            if (isDefaultSmsApp()) {
+                try { systemMmsId = saveSentMmsToProvider(phoneNumber, displayText, threadId, timestamp) }
+                catch (_: Exception) {}
+            }
+
+            // 3. Room DB 저장 (systemSmsId 포함)
             messageDao.insert(MessageEntity(
                 threadId = threadId, address = phoneNumber,
                 body = displayText, timestamp = timestamp,
                 type = Telephony.Sms.MESSAGE_TYPE_SENT,
                 read = true, seen = true, isMms = true,
-                status = Telephony.Sms.STATUS_PENDING,
+                status = Telephony.Sms.STATUS_COMPLETE,
                 attachmentPath = imageUris[0].toString(),
-                attachmentMimeType = "image/jpeg"
+                attachmentMimeType = "image/jpeg",
+                systemSmsId = if (systemMmsId > 0) systemMmsId + 1_000_000_000L else 0L
             ))
 
+            // 4. 대화 업데이트
             val contactName = contactDao.getByPhone(phoneNumber)?.name ?: lookupContactName(phoneNumber)
             val existing = conversationDao.getByIdSync(threadId)
             if (existing != null) {
@@ -389,27 +399,7 @@ class SmsSender @Inject constructor(
                 ))
             }
 
-            // 2. 이미지 압축 (총 280KB 이내로 분배)
-            val maxPerImage = 280_000 / imageUris.size
-            val compressedImages = imageUris.mapNotNull { uri ->
-                compressImage(uri, maxPerImage)
-            }
-            Log.d(TAG, "Compressed ${compressedImages.size} images, total ${compressedImages.sumOf { it.size }} bytes")
-
-            // 3. 다중 이미지 MMS PDU 생성 + 발송
-            val mmsc = getKoreanCarrierMmsc()
-            var sent = false
-            if (mmsc != null && compressedImages.isNotEmpty()) {
-                val pduBytes = buildMmsPduWithMultipleImages(phoneNumber, text, compressedImages)
-                sent = sendPduViaHttp(pduBytes, mmsc)
-            }
-
-            if (isDefaultSmsApp()) {
-                try { saveSentMmsToProvider(phoneNumber, displayText, threadId, timestamp) }
-                catch (_: Exception) {}
-            }
-
-            Log.d(TAG, "MMS with ${compressedImages.size} images sent (success=$sent)")
+            Log.d(TAG, "MMS with ${compressedImages.size} images sent")
             threadId
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send multi-image MMS", e)
@@ -461,17 +451,44 @@ class SmsSender @Inject constructor(
      * Compress image to fit MMS size limit (300KB).
      */
     private fun compressImage(uri: Uri, maxBytes: Int = 280_000): ByteArray? {
+        return compressImageWithExif(uri, maxBytes)
+    }
+
+    private fun compressImageWithExif(uri: Uri, maxBytes: Int = 280_000): ByteArray? {
         return try {
-            // Handle both content:// URIs and file:// / absolute paths
             val inputStream = if (uri.scheme == "file" || uri.scheme == null) {
                 val file = java.io.File(uri.path ?: return null)
                 if (file.exists()) file.inputStream() else return null
             } else {
                 context.contentResolver.openInputStream(uri) ?: return null
             }
-            val bitmap = BitmapFactory.decodeStream(inputStream)
+            var bitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
             if (bitmap == null) return null
+
+            // EXIF 회전 보정
+            try {
+                val exifStream = if (uri.scheme == "file" || uri.scheme == null) {
+                    java.io.File(uri.path ?: "").inputStream()
+                } else {
+                    context.contentResolver.openInputStream(uri)
+                }
+                exifStream?.use { s ->
+                    val exif = android.media.ExifInterface(s)
+                    val orient = exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)
+                    val rot = when (orient) {
+                        android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                        android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                        android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                        else -> 0f
+                    }
+                    if (rot != 0f) {
+                        val m = android.graphics.Matrix(); m.postRotate(rot)
+                        bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+                        Log.d(TAG, "EXIF rotation: ${rot}°")
+                    }
+                }
+            } catch (_: Exception) { }
 
             val maxDim = if (maxBytes < 100_000) 640 else 1024
             val resized = if (bitmap.width > maxDim || bitmap.height > maxDim) {

@@ -26,9 +26,19 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"https://api.bizconnect.com/\"")
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../bizconnect-release.jks")
+            storePassword = "Cho2239148"
+            keyAlias = "bizconnect"
+            keyPassword = "Cho2239148"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

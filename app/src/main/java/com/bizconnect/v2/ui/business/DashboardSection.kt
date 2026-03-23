@@ -50,7 +50,16 @@ fun DashboardSection(
     val progress = if (dailyLimit > 0) sentToday.toFloat() / dailyLimit else 0f
     val numberFormat = NumberFormat.getNumberInstance(Locale.KOREA)
     val balanceText = numberFormat.format(creditBalance.toLong())
-    val tierDisplay = if (subscriptionTier == "paid") "유료" else "무료"
+    val tierDisplay = when (subscriptionTier) {
+        "premium" -> "프리미엄"
+        "paid" -> "유료"
+        else -> "무료"
+    }
+    val tierColor = when (subscriptionTier) {
+        "premium" -> Color(0xFFFFD700) // Gold
+        "paid" -> Color.White
+        else -> Color.White.copy(alpha = 0.8f)
+    }
 
     Box(
         modifier = Modifier
@@ -122,9 +131,9 @@ fun DashboardSection(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = tierDisplay,
-                    color = Color.White,
+                    color = tierColor,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = if (subscriptionTier == "premium") FontWeight.Bold else FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Button(

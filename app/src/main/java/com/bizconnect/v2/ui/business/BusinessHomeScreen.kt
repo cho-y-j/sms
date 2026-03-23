@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -41,6 +42,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bizconnect.v2.ui.theme.SamsungBlue
 import com.bizconnect.v2.ui.viewmodel.AuthViewModel
 import com.bizconnect.v2.ui.viewmodel.BusinessHomeViewModel
@@ -71,6 +75,20 @@ fun BusinessHomeScreen(
     viewModel: BusinessHomeViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
+    // Refresh dashboard data when screen resumes (e.g., after server sync)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadDashboardData()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     val features = listOf(
         BusinessFeature(
             id = "message_templates",
@@ -121,13 +139,7 @@ fun BusinessHomeScreen(
             icon = Icons.Default.History,
             color = androidx.compose.ui.graphics.Color(0xFF00A0D1)
         ),
-        BusinessFeature(
-            id = "analytics",
-            title = "통계",
-            subtitle = "발송 통계 분석",
-            icon = Icons.Default.Assessment,
-            color = androidx.compose.ui.graphics.Color(0xFFED4263)
-        ),
+        // 통계는 관리자 웹 패널에서 확인
         BusinessFeature(
             id = "ai_settings",
             title = "AI 설정",

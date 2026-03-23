@@ -146,7 +146,29 @@ class SmsReceiver : BroadcastReceiver() {
                         read = false,
                         seen = false
                     )
-                    messageDao.insert(messageEntity)
+                    val msgId = messageDao.insert(messageEntity)
+
+                    // Get the system SMS ID for dedup with ContentObserver
+                    try {
+                        val cursor = context.contentResolver.query(
+                            Uri.parse("content://sms/inbox"),
+                            arrayOf("_id"),
+                            "address = ? AND date >= ?",
+                            arrayOf(address, (timestamp - 1000).toString()),
+                            "_id DESC LIMIT 1"
+                        )
+                        cursor?.use {
+                            if (it.moveToFirst()) {
+                                val systemSmsId = it.getLong(0)
+                                if (systemSmsId > 0) {
+                                    messageDao.updateSystemSmsId(msgId, systemSmsId)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not read system SMS ID", e)
+                    }
+
                     updateConversation(threadId, address, contactName, body, timestamp)
 
                     Log.d(TAG, "SMS received from $address, spam=$isSpam")

@@ -38,10 +38,13 @@ class BusinessHomeViewModel @Inject constructor(
     }
 
     fun loadDashboardData() {
+        // Invalidate cache to pick up server-synced values
+        appPreferences.invalidateCache()
+
         // Load preferences synchronously (they use runBlocking internally)
         subscriptionTier = appPreferences.getSubscriptionTier()
         creditBalance = appPreferences.getCreditBalance()
-        dailyLimit = if (subscriptionTier == "paid") {
+        dailyLimit = if (subscriptionTier == "paid" || subscriptionTier == "premium") {
             appPreferences.getPaidTierDailyLimit()
         } else {
             appPreferences.getDailyLimitCount()

@@ -160,20 +160,23 @@ class SendHistoryViewModel @Inject constructor(
 
             for (i in 0 until data.length()) {
                 val record = data.getJSONObject(i)
-                val recipient = record.optString("recipient", "알 수 없음")
+                val recipient = record.optString("phone", record.optString("recipient", "알 수 없음"))
+                val name = record.optString("name", "")
                 val message = record.optString("message", "")
-                val timestamp = record.optLong("timestamp", 0L)
-                val status = record.optString("status", "success")
-                val cost = record.optInt("cost", 0)
+                val createdAt = record.optString("createdAt", "0")
+                val timestamp = try { createdAt.toLong() } catch (_: Exception) { 0L }
+                val status = record.optString("status", "sent")
+                val method = record.optString("method", "paid")
+                val displayName = if (name.isNotBlank()) "$name ($recipient)" else recipient
 
                 items.add(
                     SendHistoryItem(
-                        recipient = recipient,
+                        recipient = displayName,
                         messagePreview = message.take(80),
-                        date = if (timestamp > 0) dateFormat.format(Date(timestamp)) else record.optString("date", ""),
-                        method = "paid",
-                        status = status,
-                        cost = cost,
+                        date = if (timestamp > 0) dateFormat.format(Date(timestamp)) else "",
+                        method = method,
+                        status = if (status == "sent") "success" else status,
+                        cost = 0,
                         timestamp = timestamp
                     )
                 )

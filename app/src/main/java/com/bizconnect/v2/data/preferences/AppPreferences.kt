@@ -81,6 +81,14 @@ class AppPreferences @Inject constructor(
 
     private var cache = mutableMapOf<String, Any?>()
 
+    /**
+     * Clear the in-memory cache so next read goes to DataStore.
+     * Useful after server sync updates values in another coroutine.
+     */
+    fun invalidateCache() {
+        cache.clear()
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun <T> readSync(key: Preferences.Key<T>, default: T): T {
         val cached = cache[key.name] as? T

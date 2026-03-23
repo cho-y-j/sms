@@ -55,6 +55,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE systemSmsId = :systemSmsId LIMIT 1")
     suspend fun getBySystemSmsId(systemSmsId: Long): MessageEntity?
 
+    @Query("UPDATE messages SET systemSmsId = :systemSmsId WHERE id = :id")
+    suspend fun updateSystemSmsId(id: Long, systemSmsId: Long)
+
     @Update
     suspend fun update(message: MessageEntity)
 
