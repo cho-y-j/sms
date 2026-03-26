@@ -34,6 +34,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import com.bizconnect.v2.ui.navigation.MainScreen
 import com.bizconnect.v2.ui.theme.BizConnectTheme
+import com.bizconnect.v2.data.remote.TokenManager
 import com.bizconnect.v2.data.sync.SmsSyncManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +60,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var messageTemplateDao: com.bizconnect.v2.data.local.db.dao.MessageTemplateDao
 
+    @Inject
+    lateinit var tokenManager: TokenManager
+
     private var isDefaultSmsApp by mutableStateOf(false)
     private var contentObserver: ContentObserver? = null
 
@@ -83,8 +87,6 @@ class MainActivity : ComponentActivity() {
         }
         // Process any stuck pending messages from web
         processPendingWebMessages()
-        // Sync local templates to server
-        syncTemplatesToServer()
 
         setContent {
             val fontScale by dataStore.data
@@ -191,6 +193,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * 서버에서 AI API 키 등 설정을 받아와 로컬에 저장
+     * Uses TokenManager for automatic 401 retry with token refresh.
      */
     private fun fetchConfigOnStart() {
         val accessToken = appPreferences.getAccessToken()
@@ -198,13 +201,11 @@ class MainActivity : ComponentActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val client = okhttp3.OkHttpClient()
                 // 1. config에서 AI 키 가져오기
-                val configReq = okhttp3.Request.Builder()
+                val configReqBuilder = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/admin/config")
-                    .addHeader("Authorization", "Bearer $accessToken")
-                    .get().build()
-                val configResp = client.newCall(configReq).execute()
+                    .get()
+                val configResp = tokenManager.executeAuthenticated(configReqBuilder)
                 val configBody = configResp.body?.string() ?: "[]"
                 configResp.close()
                 try {
@@ -219,11 +220,10 @@ class MainActivity : ComponentActivity() {
                 } catch (_: Exception) { }
 
                 // 2. user/me에서 role, tier 가져오기
-                val meReq = okhttp3.Request.Builder()
+                val meReqBuilder = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/user/me")
-                    .addHeader("Authorization", "Bearer $accessToken")
-                    .get().build()
-                val meResp = client.newCall(meReq).execute()
+                    .get()
+                val meResp = tokenManager.executeAuthenticated(meReqBuilder)
                 val meBody = meResp.body?.string() ?: "{}"
                 meResp.close()
                 try {
@@ -263,13 +263,11 @@ class MainActivity : ComponentActivity() {
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
                             val body = org.json.JSONObject().put("token", fcmToken).toString()
-                            val request = okhttp3.Request.Builder()
+                            val requestBuilder = okhttp3.Request.Builder()
                                 .url("https://sm.on1.kr/api/fcm/token")
-                                .addHeader("Authorization", "Bearer $accessToken")
                                 .put(okhttp3.RequestBody.create(
                                     "application/json".toMediaType(), body))
-                                .build()
-                            val resp = okhttp3.OkHttpClient().newCall(request).execute()
+                            val resp = tokenManager.executeAuthenticated(requestBuilder)
                             android.util.Log.d("FCM_UPLOAD", "Server response: ${resp.code}")
                             resp.close()
                         } catch (e: Exception) {
@@ -284,6 +282,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * 폰 연락처를 서버에 동기화
+     * Uses TokenManager for automatic 401 retry with token refresh.
      */
     private fun syncContactsToServer() {
         val accessToken = appPreferences.getAccessToken()
@@ -319,14 +318,10 @@ class MainActivity : ComponentActivity() {
                 val payload = org.json.JSONObject()
                 payload.put("contacts", org.json.JSONArray(contacts))
 
-                val request = okhttp3.Request.Builder()
+                val requestBuilder = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/user/contacts/import")
-                    .addHeader("Authorization", "Bearer $accessToken")
                     .post(okhttp3.RequestBody.create("application/json".toMediaType(), payload.toString()))
-                    .build()
-                val resp = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .build().newCall(request).execute()
+                val resp = tokenManager.executeAuthenticated(requestBuilder)
                 android.util.Log.d("ContactSync", "Contacts sync result: ${resp.code}")
                 resp.close()
             } catch (e: Exception) {
@@ -337,6 +332,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * 폰 SMS 이력을 서버에 동기화 (최근 200건)
+     * Uses TokenManager for automatic 401 retry with token refresh.
      */
     private fun syncSmsHistoryToServer() {
         val accessToken = appPreferences.getAccessToken()
@@ -376,15 +372,10 @@ class MainActivity : ComponentActivity() {
                 val payload = org.json.JSONObject()
                 payload.put("messages", org.json.JSONArray(messages))
 
-                val request = okhttp3.Request.Builder()
+                val requestBuilder = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/user/sms-history/sync")
-                    .addHeader("Authorization", "Bearer $accessToken")
                     .post(okhttp3.RequestBody.create("application/json".toMediaType(), payload.toString()))
-                    .build()
-                val resp = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .build().newCall(request).execute()
+                val resp = tokenManager.executeAuthenticated(requestBuilder)
                 android.util.Log.d("SmsSync", "SMS sync result: ${resp.code}")
                 resp.close()
             } catch (e: Exception) {
@@ -393,21 +384,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Uses TokenManager for automatic 401 retry with token refresh.
+     */
     private fun processPendingWebMessages() {
         val accessToken = appPreferences.getAccessToken()
         if (accessToken.isNullOrBlank() || accessToken.startsWith("offline_")) return
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-                val request = okhttp3.Request.Builder()
+                val requestBuilder = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/user/sms/pending")
-                    .addHeader("Authorization", "Bearer $accessToken")
-                    .get().build()
-                val resp = client.newCall(request).execute()
+                    .get()
+                val resp = tokenManager.executeAuthenticated(requestBuilder)
                 val body = resp.body?.string() ?: ""
                 resp.close()
 
@@ -440,21 +429,17 @@ class MainActivity : ComponentActivity() {
 
                         // Report success
                         val statusBody = org.json.JSONObject().put("status", "sent").toString()
-                        val statusReq = okhttp3.Request.Builder()
+                        val statusReqBuilder = okhttp3.Request.Builder()
                             .url("https://sm.on1.kr/api/user/sms/$msgId/status")
-                            .addHeader("Authorization", "Bearer $accessToken")
                             .put(okhttp3.RequestBody.create("application/json".toMediaType(), statusBody))
-                            .build()
-                        client.newCall(statusReq).execute().close()
+                        tokenManager.executeAuthenticated(statusReqBuilder).close()
                         Log.d("PendingSync", "Sent pending SMS $msgId to $phone")
                     } catch (e: Exception) {
                         val statusBody = org.json.JSONObject().put("status", "failed").put("error", e.message ?: "").toString()
-                        val statusReq = okhttp3.Request.Builder()
+                        val statusReqBuilder = okhttp3.Request.Builder()
                             .url("https://sm.on1.kr/api/user/sms/$msgId/status")
-                            .addHeader("Authorization", "Bearer $accessToken")
                             .put(okhttp3.RequestBody.create("application/json".toMediaType(), statusBody))
-                            .build()
-                        client.newCall(statusReq).execute().close()
+                        try { tokenManager.executeAuthenticated(statusReqBuilder).close() } catch (_: Exception) { }
                     }
                 }
             } catch (e: Exception) {
@@ -465,6 +450,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * 로컬 템플릿을 서버에 동기화
+     * Uses TokenManager for automatic 401 retry with token refresh.
      */
     private fun syncTemplatesToServer() {
         val accessToken = appPreferences.getAccessToken()
@@ -476,7 +462,6 @@ class MainActivity : ComponentActivity() {
 
                 if (templates.isEmpty()) return@launch
 
-                val client = okhttp3.OkHttpClient()
                 for (template in templates) {
                     try {
                         val body = org.json.JSONObject().apply {
@@ -485,12 +470,10 @@ class MainActivity : ComponentActivity() {
                             put("category", template.category)
                         }.toString()
 
-                        val request = okhttp3.Request.Builder()
+                        val requestBuilder = okhttp3.Request.Builder()
                             .url("https://sm.on1.kr/api/user/templates")
-                            .addHeader("Authorization", "Bearer $accessToken")
                             .post(okhttp3.RequestBody.create("application/json".toMediaType(), body))
-                            .build()
-                        client.newCall(request).execute().close()
+                        tokenManager.executeAuthenticated(requestBuilder).close()
                     } catch (_: Exception) { }
                 }
                 Log.d("TemplateSync", "Synced ${templates.size} templates to server")

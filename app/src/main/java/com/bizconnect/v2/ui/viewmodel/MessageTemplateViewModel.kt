@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.local.db.dao.MessageTemplateDao
 import com.bizconnect.v2.data.local.db.entity.MessageTemplateEntity
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import com.bizconnect.v2.domain.engine.TemplateEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,7 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import javax.inject.Inject
@@ -40,7 +40,8 @@ class MessageTemplateViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val messageTemplateDao: MessageTemplateDao,
     private val templateEngine: TemplateEngine,
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     val adminTemplates = mutableStateOf<List<AdminTemplate>>(emptyList())
@@ -52,13 +53,11 @@ class MessageTemplateViewModel @Inject constructor(
     fun fetchAdminTemplates() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val token = appPreferences.getAccessToken() ?: return@launch
-                val client = OkHttpClient()
-                val request = Request.Builder()
+                if (appPreferences.getAccessToken() == null) return@launch
+                val requestBuilder = Request.Builder()
                     .url("https://sm.on1.kr/api/user/admin-templates")
-                    .addHeader("Authorization", "Bearer $token")
-                    .get().build()
-                val resp = client.newCall(request).execute()
+                    .get()
+                val resp = tokenManager.executeAuthenticated(requestBuilder)
                 val body = resp.body?.string() ?: ""
                 resp.close()
 

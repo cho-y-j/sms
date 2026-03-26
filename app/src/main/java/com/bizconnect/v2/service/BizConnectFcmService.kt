@@ -6,6 +6,7 @@ import android.util.Log
 import com.bizconnect.v2.data.local.db.dao.TaskDao
 import com.bizconnect.v2.data.local.db.entity.TaskEntity
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import com.bizconnect.v2.data.remote.api.BizConnectApi
 import com.bizconnect.v2.domain.engine.ApprovalManager
 import com.bizconnect.v2.domain.engine.TaskEntity as DomainTaskEntity
@@ -55,6 +56,9 @@ class BizConnectFcmService : FirebaseMessagingService() {
 
     @Inject
     lateinit var api: BizConnectApi
+
+    @Inject
+    lateinit var tokenManager: TokenManager
 
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -273,21 +277,21 @@ class BizConnectFcmService : FirebaseMessagingService() {
 
             Log.d(TAG, "web_sms_batch: jobId=$jobId, expected count=$count")
 
-            val token = appPreferences.getAccessToken()
-            if (token.isNullOrEmpty()) {
-                Log.e(TAG, "web_sms_batch: no access token available")
-                return@launch
-            }
-
-            val client = OkHttpClient.Builder()
-                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
             try {
-                // Step 1: Fetch pending messages from server
-                val pendingMessages = fetchPendingMessages(client, token, jobId)
+                // Step 1: FCM 데이터에 메시지가 포함되어 있으면 바로 사용 (서버 재호출 불필요)
+                val messagesJson = data["messages"]
+                val pendingMessages: List<JSONObject> = if (!messagesJson.isNullOrBlank()) {
+                    try {
+                        val arr = JSONArray(messagesJson)
+                        (0 until arr.length()).map { arr.getJSONObject(it) }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "web_sms_batch: failed to parse inline messages, fetching from server")
+                        fetchPendingMessages(jobId)
+                    }
+                } else {
+                    fetchPendingMessages(jobId)
+                }
+
                 if (pendingMessages.isEmpty()) {
                     Log.w(TAG, "web_sms_batch: no pending messages for jobId=$jobId")
                     return@launch
@@ -310,7 +314,7 @@ class BizConnectFcmService : FirebaseMessagingService() {
 
                     if (phone.isBlank() || body.isBlank()) {
                         Log.w(TAG, "web_sms_batch: skipping message $msgId - empty phone or body")
-                        reportSmsStatus(client, token, msgId, "failed", "Empty phone number or message body")
+                        reportSmsStatus(msgId, "failed", "Empty phone number or message body")
                         continue
                     }
 
@@ -329,19 +333,17 @@ class BizConnectFcmService : FirebaseMessagingService() {
                         }
 
                         Log.d(TAG, "web_sms_batch: sent SMS ${index + 1}/${pendingMessages.size} to $phone (id=$msgId)")
-                        reportSmsStatus(client, token, msgId, "sent", null)
+                        try { reportSmsStatus(msgId, "sent", null) } catch (_: Exception) { Log.w(TAG, "Status report failed for $msgId (sent)") }
                     } catch (e: Exception) {
                         val errorMsg = e.message ?: "Unknown send error"
                         Log.e(TAG, "web_sms_batch: failed to send SMS to $phone (id=$msgId)", e)
-                        reportSmsStatus(client, token, msgId, "failed", errorMsg)
+                        try { reportSmsStatus(msgId, "failed", errorMsg) } catch (_: Exception) { Log.w(TAG, "Status report failed for $msgId (failed)") }
                     }
                 }
 
                 Log.d(TAG, "web_sms_batch: completed jobId=$jobId")
             } catch (e: Exception) {
                 Log.e(TAG, "web_sms_batch: fatal error processing jobId=$jobId", e)
-            } finally {
-                client.dispatcher.executorService.shutdown()
             }
         }
     }
@@ -349,19 +351,14 @@ class BizConnectFcmService : FirebaseMessagingService() {
     /**
      * Fetches pending SMS messages from server for a given job.
      * GET /api/user/sms/pending?jobId={jobId}
+     * Uses TokenManager for automatic 401 retry with token refresh.
      */
-    private fun fetchPendingMessages(
-        client: OkHttpClient,
-        token: String,
-        jobId: String
-    ): List<JSONObject> {
-        val request = Request.Builder()
+    private fun fetchPendingMessages(jobId: String): List<JSONObject> {
+        val requestBuilder = Request.Builder()
             .url("$SERVER_BASE_URL/api/user/sms/pending?jobId=$jobId")
-            .header("Authorization", "Bearer $token")
             .get()
-            .build()
 
-        val response = client.newCall(request).execute()
+        val response = tokenManager.executeAuthenticated(requestBuilder)
         return response.use { resp ->
             if (!resp.isSuccessful) {
                 Log.e(TAG, "fetchPendingMessages: HTTP ${resp.code} for jobId=$jobId")
@@ -403,10 +400,9 @@ class BizConnectFcmService : FirebaseMessagingService() {
     /**
      * Reports SMS send status back to server.
      * PUT /api/user/sms/{id}/status
+     * Uses TokenManager for automatic 401 retry with token refresh.
      */
     private fun reportSmsStatus(
-        client: OkHttpClient,
-        token: String,
         messageId: String,
         status: String,
         error: String?
@@ -422,13 +418,11 @@ class BizConnectFcmService : FirebaseMessagingService() {
             val requestBody = json.toString()
                 .toRequestBody("application/json".toMediaType())
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$SERVER_BASE_URL/api/user/sms/$messageId/status")
-                .header("Authorization", "Bearer $token")
                 .put(requestBody)
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             response.use { resp ->
                 if (!resp.isSuccessful) {
                     Log.w(TAG, "reportSmsStatus: HTTP ${resp.code} for id=$messageId")

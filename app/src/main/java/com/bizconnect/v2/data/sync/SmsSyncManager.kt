@@ -150,23 +150,25 @@ class SmsSyncManager @Inject constructor(
             val smsMessages = readSmsFromProvider(sinceTimestamp = lastSync)
             val mmsMessages = readMmsFromProvider(sinceTimestamp = lastSync)
             val rcsMessages = readRcsFromProvider(sinceTimestamp = lastSync)
-            val messages = smsMessages + mmsMessages + rcsMessages
-            Log.d(TAG, "Read ${smsMessages.size} SMS + ${mmsMessages.size} MMS + ${rcsMessages.size} RCS = ${messages.size} new messages")
+
+            // 발신 메시지(type=2)는 동기화에서 제외 — sendSms/sendMms에서 이미 Room에 저장함
+            // 수신 메시지(type=1)만 동기화 → 중복 문제 근본 해결
+            val receivedOnly = (smsMessages + mmsMessages + rcsMessages).filter { it.type == 1 }
+            val messages = receivedOnly
+            Log.d(TAG, "Read ${smsMessages.size} SMS + ${mmsMessages.size} MMS + ${rcsMessages.size} RCS → 수신만 ${messages.size}건")
 
             if (messages.isEmpty()) return
 
-            // Filter out messages already in Room DB
+            // 수신 메시지 중복 체크
             val newMessages = messages.filter { msg ->
-                // 1차: systemSmsId로 중복 체크
                 if (msg.systemSmsId != 0L) {
                     val existing = messageDao.getBySystemSmsId(msg.systemSmsId)
                     if (existing != null) return@filter false
                 }
-                // 2차: 같은 threadId에서 body(10자) + 30초 이내 → 중복
+                // address + timestamp 3초 이내 → 중복
                 val existingInThread = messageDao.getMessagesByThreadDirect(msg.threadId)
                 val isDuplicate = existingInThread.any { existing ->
-                    Math.abs(existing.timestamp - msg.timestamp) < 30000 &&
-                    (existing.body?.take(10) ?: "") == (msg.body?.take(10) ?: "")
+                    Math.abs(existing.timestamp - msg.timestamp) < 3000
                 }
                 !isDuplicate
             }

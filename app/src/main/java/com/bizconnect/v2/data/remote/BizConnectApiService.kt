@@ -4,12 +4,10 @@ import com.bizconnect.v2.data.preferences.AppPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,17 +19,13 @@ import javax.inject.Singleton
  */
 @Singleton
 class BizConnectApiService @Inject constructor(
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) {
     companion object {
         private const val BASE_URL = "https://sm.on1.kr"
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
     }
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
 
     private suspend fun getToken(): String? = appPreferences.getAccessToken()
 
@@ -57,7 +51,7 @@ class BizConnectApiService @Inject constructor(
         subject: String? = null
     ): SmsSendResult = withContext(Dispatchers.IO) {
         try {
-            val token = getToken() ?: return@withContext SmsSendResult(false, error = "로그인 필요")
+            if (getToken() == null) return@withContext SmsSendResult(false, error = "로그인 필요")
 
             val body = JSONObject().apply {
                 put("phone", phone)
@@ -66,15 +60,14 @@ class BizConnectApiService @Inject constructor(
                 subject?.let { put("subject", it) }
             }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$BASE_URL/api/sms/send")
-                .addHeader("Authorization", "Bearer $token")
                 .addHeader("Content-Type", "application/json")
                 .post(body.toString().toRequestBody(JSON_TYPE))
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val responseBody = response.body?.string() ?: "{}"
+            response.close()
             val json = JSONObject(responseBody)
 
             if (response.isSuccessful && json.optString("success") == "true") {
@@ -102,7 +95,7 @@ class BizConnectApiService @Inject constructor(
         subject: String? = null
     ): BatchSendResult = withContext(Dispatchers.IO) {
         try {
-            val token = getToken() ?: return@withContext BatchSendResult(0, 0, 0, 0, "로그인 필요")
+            if (getToken() == null) return@withContext BatchSendResult(0, 0, 0, 0, "로그인 필요")
 
             val body = JSONObject().apply {
                 put("phones", JSONArray(phones))
@@ -111,15 +104,14 @@ class BizConnectApiService @Inject constructor(
                 subject?.let { put("subject", it) }
             }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$BASE_URL/api/sms/batch")
-                .addHeader("Authorization", "Bearer $token")
                 .addHeader("Content-Type", "application/json")
                 .post(body.toString().toRequestBody(JSON_TYPE))
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val responseBody = response.body?.string() ?: "{}"
+            response.close()
             val json = JSONObject(responseBody)
 
             if (response.isSuccessful) {
@@ -155,7 +147,7 @@ class BizConnectApiService @Inject constructor(
         templateCode: String? = null
     ): SmsSendResult = withContext(Dispatchers.IO) {
         try {
-            val token = getToken() ?: return@withContext SmsSendResult(false, error = "로그인 필요")
+            if (getToken() == null) return@withContext SmsSendResult(false, error = "로그인 필요")
 
             val body = JSONObject().apply {
                 put("phone", phone)
@@ -163,15 +155,14 @@ class BizConnectApiService @Inject constructor(
                 templateCode?.let { put("templateCode", it) }
             }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$BASE_URL/api/sms/alimtalk")
-                .addHeader("Authorization", "Bearer $token")
                 .addHeader("Content-Type", "application/json")
                 .post(body.toString().toRequestBody(JSON_TYPE))
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val responseBody = response.body?.string() ?: "{}"
+            response.close()
             val json = JSONObject(responseBody)
 
             if (response.isSuccessful && json.optString("success") == "true") {
@@ -203,16 +194,15 @@ class BizConnectApiService @Inject constructor(
 
     suspend fun getBalance(): BalanceInfo = withContext(Dispatchers.IO) {
         try {
-            val token = getToken() ?: return@withContext BalanceInfo()
+            if (getToken() == null) return@withContext BalanceInfo()
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$BASE_URL/api/sms/balance")
-                .addHeader("Authorization", "Bearer $token")
                 .get()
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val responseBody = response.body?.string() ?: "{}"
+            response.close()
             val json = JSONObject(responseBody)
 
             if (response.isSuccessful) {
@@ -249,8 +239,6 @@ class BizConnectApiService @Inject constructor(
         paymentType: String
     ): PrepareResult = withContext(Dispatchers.IO) {
         try {
-            val token = getToken()
-
             val body = JSONObject().apply {
                 put("amount", amount)
                 put("goodsName", goodsName)
@@ -263,12 +251,13 @@ class BizConnectApiService @Inject constructor(
                 .addHeader("Content-Type", "application/json")
                 .post(body.toString().toRequestBody(JSON_TYPE))
 
-            if (token != null) {
-                requestBuilder.addHeader("Authorization", "Bearer $token")
+            val response = if (getToken() != null) {
+                tokenManager.executeAuthenticated(requestBuilder)
+            } else {
+                tokenManager.getClient().newCall(requestBuilder.build()).execute()
             }
-
-            val response = client.newCall(requestBuilder.build()).execute()
             val responseBody = response.body?.string() ?: "{}"
+            response.close()
             val json = JSONObject(responseBody)
 
             if (response.isSuccessful) {
@@ -291,16 +280,15 @@ class BizConnectApiService @Inject constructor(
 
     suspend fun checkSendResult(sendCode: String): JSONObject? = withContext(Dispatchers.IO) {
         try {
-            val token = getToken() ?: return@withContext null
+            if (getToken() == null) return@withContext null
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("$BASE_URL/api/sms/result/$sendCode")
-                .addHeader("Authorization", "Bearer $token")
                 .get()
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val body = response.body?.string() ?: return@withContext null
+            response.close()
             JSONObject(body)
         } catch (_: Exception) { null }
     }

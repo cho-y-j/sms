@@ -1,6 +1,7 @@
 package com.bizconnect.v2.data.remote.auth
 
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -15,7 +16,9 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthApiService @Inject constructor(
-    private val appPreferences: AppPreferences
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) {
     companion object {
         private const val BASE_URL = "https://sm.on1.kr"
@@ -28,15 +31,14 @@ class AuthApiService @Inject constructor(
      */
     suspend fun fetchConfig(): Map<String, String> = withContext(Dispatchers.IO) {
         try {
-            val token = appPreferences.getAccessToken() ?: return@withContext emptyMap()
-            val request = Request.Builder()
+            if (appPreferences.getAccessToken() == null) return@withContext emptyMap()
+            val requestBuilder = Request.Builder()
                 .url("$BASE_URL/api/admin/config")
-                .addHeader("Authorization", "Bearer $token")
                 .get()
-                .build()
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: "[]"
+                response.close()
                 val configs = mutableMapOf<String, String>()
                 val arr = org.json.JSONArray(body)
                 for (i in 0 until arr.length()) {
@@ -44,7 +46,10 @@ class AuthApiService @Inject constructor(
                     configs[item.getString("key")] = item.getString("value")
                 }
                 configs
-            } else emptyMap()
+            } else {
+                response.close()
+                emptyMap()
+            }
         } catch (_: Exception) { emptyMap() }
     }
 
@@ -56,6 +61,7 @@ class AuthApiService @Inject constructor(
     data class AuthResult(
         val success: Boolean,
         val token: String? = null,
+        val refreshToken: String? = null,
         val userId: String? = null,
         val error: String? = null,
         val offline: Boolean = false
@@ -63,9 +69,18 @@ class AuthApiService @Inject constructor(
 
     suspend fun login(phone: String, password: String): AuthResult = withContext(Dispatchers.IO) {
         try {
+            // Android ID를 deviceToken으로 사용 (기기 인증 자동 통과)
+            val androidId = android.provider.Settings.Secure.getString(
+                appContext.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID
+            ) ?: "app_${System.currentTimeMillis()}"
+
             val requestBody = JSONObject().apply {
                 put("phone", phone)
                 put("password", password)
+                put("deviceToken", "app_$androidId")
+                put("deviceName", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+                put("platform", "app")
             }
 
             val request = Request.Builder()
@@ -79,9 +94,15 @@ class AuthApiService @Inject constructor(
 
             if (response.isSuccessful) {
                 val json = JSONObject(responseBody)
-                val token = json.optString("token", "")
+                val token = json.optString("token", json.optString("accessToken", ""))
+                val refreshToken = json.optString("refreshToken", "")
                 val userId = json.optString("userId", json.optString("id", ""))
-                AuthResult(success = true, token = token, userId = userId)
+                AuthResult(
+                    success = true,
+                    token = token,
+                    refreshToken = refreshToken.ifEmpty { null },
+                    userId = userId
+                )
             } else {
                 val errorMsg = try {
                     val errJson = JSONObject(responseBody)
@@ -129,9 +150,15 @@ class AuthApiService @Inject constructor(
 
             if (response.isSuccessful) {
                 val json = JSONObject(responseBody)
-                val token = json.optString("token", "")
+                val token = json.optString("token", json.optString("accessToken", ""))
+                val refreshToken = json.optString("refreshToken", "")
                 val userId = json.optString("userId", json.optString("id", ""))
-                AuthResult(success = true, token = token, userId = userId)
+                AuthResult(
+                    success = true,
+                    token = token,
+                    refreshToken = refreshToken.ifEmpty { null },
+                    userId = userId
+                )
             } else {
                 val errorMsg = try {
                     val errJson = JSONObject(responseBody)

@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.util.Log
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -19,10 +20,12 @@ import javax.inject.Singleton
 @Singleton
 class FileUploader @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) {
     private val TAG = "FileUploader"
     private val SERVER_URL = "https://sm.on1.kr/api/user/upload/image"
+    private val MAX_SIZE = 5 * 1024 * 1024 // 5MB
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -39,10 +42,6 @@ class FileUploader @Inject constructor(
         val errorMessage: String? = null
     )
 
-    /**
-     * Upload file to BizConnect server (→ S3).
-     * Returns short URL: sm.on1.kr/i/abc123.jpg
-     */
     suspend fun uploadFile(uri: Uri): UploadResult {
         return try {
             val fileName = getFileName(uri) ?: "file_${System.currentTimeMillis()}"
@@ -50,32 +49,42 @@ class FileUploader @Inject constructor(
 
             Log.d(TAG, "Uploading: $fileName ($fileSize bytes)")
 
-            // Read file as Base64
+            if (fileSize > MAX_SIZE) {
+                return UploadResult(false, errorMessage = "5MB 이하 파일만 업로드 가능합니다")
+            }
+
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: return UploadResult(false, errorMessage = "파일을 열 수 없습니다")
             val bytes = inputStream.readBytes()
             inputStream.close()
 
-            // Detect MIME type
+            // 토큰 체크 (캐시 무효화 후 재확인)
+            appPreferences.invalidateCache()
+            if (appPreferences.getAccessToken().isNullOrBlank()) {
+                return UploadResult(false, errorMessage = "로그인이 필요합니다")
+            }
+
             val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
-            val base64Data = "data:$mimeType;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
 
-            // Upload to server
-            val token = appPreferences.getAccessToken()
-                ?: return UploadResult(false, errorMessage = "로그인이 필요합니다")
+            // Base64 인코딩
+            val base64Str = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val dataUri = "data:$mimeType;base64,$base64Str"
 
-            val payload = JSONObject().apply {
-                put("data", base64Data)
-                put("fileName", fileName)
-            }.toString()
+            // Sanitize filename to ASCII-safe characters to avoid JSON encoding issues with Korean
+            val safeFileName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
 
-            val request = Request.Builder()
+            // Use JSONObject for safe JSON construction, inject base64 data separately to avoid memory issues
+            val metaObj = JSONObject()
+            metaObj.put("fileName", safeFileName)
+            val metaStr = metaObj.toString()
+            // Inject large base64 data field without going through JSONObject
+            val payload = metaStr.replace("}", ",\"data\":\"$dataUri\"}")
+
+            val requestBuilder = Request.Builder()
                 .url(SERVER_URL)
-                .addHeader("Authorization", "Bearer $token")
                 .post(payload.toRequestBody("application/json".toMediaType()))
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val body = response.body?.string() ?: ""
             response.close()
 
@@ -83,19 +92,22 @@ class FileUploader @Inject constructor(
                 val json = JSONObject(body)
                 val publicUrl = json.optString("publicUrl", "")
                 val previewUrl = json.optString("previewUrl", "")
+                val downloadUrl = json.optString("downloadUrl", "")
+                val fileType = json.optString("fileType", "image")
 
-                Log.d(TAG, "Upload success: $previewUrl")
+                Log.d(TAG, "Upload success: type=$fileType, downloadUrl=$downloadUrl, previewUrl=$previewUrl")
 
                 UploadResult(
                     success = true,
-                    downloadUrl = previewUrl.ifEmpty { publicUrl },
+                    downloadUrl = downloadUrl.ifEmpty { previewUrl.ifEmpty { publicUrl } },
                     previewUrl = previewUrl,
                     fileName = fileName,
                     fileSize = fileSize
                 )
             } else {
                 val error = try { JSONObject(body).optString("error", "업로드 실패") } catch (_: Exception) { "업로드 실패" }
-                UploadResult(false, errorMessage = error)
+                Log.e(TAG, "Upload failed: HTTP ${response.code} - $error - body: ${body.take(200)}")
+                UploadResult(false, errorMessage = "HTTP ${response.code}: $error")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Upload failed: ${e.message}", e)

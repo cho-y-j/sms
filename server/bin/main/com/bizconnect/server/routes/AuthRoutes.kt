@@ -339,8 +339,22 @@ fun Route.authRoutes(
                                 it[lastUsedAt] = System.currentTimeMillis()
                             }
                         }
+                    } else if (deviceToken.startsWith("app_")) {
+                        // 앱에서 보낸 기기 토큰 → 자동 등록 (본인 폰)
+                        val deviceName = json["deviceName"]?.let { (it as kotlinx.serialization.json.JsonPrimitive).content } ?: "Android App"
+                        transaction {
+                            TrustedDevicesTable.insert {
+                                it[id] = java.util.UUID.randomUUID().toString()
+                                it[TrustedDevicesTable.userId] = userId
+                                it[TrustedDevicesTable.deviceToken] = deviceToken
+                                it[TrustedDevicesTable.deviceName] = deviceName
+                                it[platform] = "app"
+                                it[lastUsedAt] = System.currentTimeMillis()
+                                it[createdAt] = System.currentTimeMillis()
+                            }
+                        }
                     } else {
-                        // Device token provided but not found - require verification
+                        // 웹에서 보낸 새 기기 토큰 → SMS 인증 필요
                         call.respond(
                             HttpStatusCode.OK,
                             mapOf(

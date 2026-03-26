@@ -13,11 +13,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -38,7 +38,8 @@ data class SendHistoryItem(
 @HiltViewModel
 class SendHistoryViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     val allHistory = mutableStateListOf<SendHistoryItem>()
@@ -139,17 +140,14 @@ class SendHistoryViewModel @Inject constructor(
 
     private fun loadPaidSentHistory(): List<SendHistoryItem> {
         val items = mutableListOf<SendHistoryItem>()
-        val token = appPreferences.getAccessToken() ?: return items
+        if (appPreferences.getAccessToken() == null) return items
 
         try {
-            val client = OkHttpClient()
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("https://sm.on1.kr/api/user/sms/history")
-                .addHeader("Authorization", "Bearer $token")
                 .get()
-                .build()
 
-            val response = client.newCall(request).execute()
+            val response = tokenManager.executeAuthenticated(requestBuilder)
             val body = response.body?.string() ?: ""
             response.close()
 

@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import com.bizconnect.v2.data.remote.auth.AuthApiService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import okhttp3.MediaType.Companion.toMediaType
@@ -15,7 +16,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authApiService: AuthApiService,
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     var isLoading by mutableStateOf(false)
@@ -51,6 +53,7 @@ class AuthViewModel @Inject constructor(
                 val result = authApiService.login(phone, password)
                 if (result.success) {
                     result.token?.let { appPreferences.setAccessToken(it) }
+                    result.refreshToken?.let { appPreferences.setRefreshToken(it) }
                     result.userId?.let { appPreferences.setUserId(it) }
                     isLoggedIn = true
                     isOfflineMode = result.offline
@@ -108,9 +111,13 @@ class AuthViewModel @Inject constructor(
                 val result = authApiService.signup(name, phone, email, password)
                 if (result.success) {
                     result.token?.let { appPreferences.setAccessToken(it) }
+                    result.refreshToken?.let { appPreferences.setRefreshToken(it) }
                     result.userId?.let { appPreferences.setUserId(it) }
                     isLoggedIn = true
                     isOfflineMode = result.offline
+                    // 가입 후 자동으로 FCM 토큰 등록 + 설정 동기화
+                    uploadFcmToken()
+                    fetchServerConfig()
                     onSuccess()
                 } else {
                     error = result.error ?: "회원가입에 실패했습니다"
@@ -134,15 +141,11 @@ class AuthViewModel @Inject constructor(
             try {
                 val fcmToken = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
                 appPreferences.saveFcmToken(fcmToken)
-                val accessToken = appPreferences.getAccessToken() ?: return@launch
-                val client = okhttp3.OkHttpClient()
                 val body = org.json.JSONObject().put("token", fcmToken).toString()
                 val request = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/fcm/token")
-                    .addHeader("Authorization", "Bearer $accessToken")
                     .put(okhttp3.RequestBody.create("application/json".toMediaType(), body))
-                    .build()
-                client.newCall(request).execute().close()
+                tokenManager.executeAuthenticated(request).close()
             } catch (_: Exception) { }
         }
     }
@@ -158,13 +161,10 @@ class AuthViewModel @Inject constructor(
                     if (key.isNotBlank()) appPreferences.setDeepSeekApiKey(key)
                 }
                 // role도 저장
-                val accessToken = appPreferences.getAccessToken() ?: return@launch
-                val client = okhttp3.OkHttpClient()
                 val request = okhttp3.Request.Builder()
                     .url("https://sm.on1.kr/api/user/me")
-                    .addHeader("Authorization", "Bearer $accessToken")
-                    .get().build()
-                val resp = client.newCall(request).execute()
+                    .get()
+                val resp = tokenManager.executeAuthenticated(request)
                 val body = resp.body?.string() ?: ""
                 resp.close()
                 val json = org.json.JSONObject(body)

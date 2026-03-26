@@ -321,7 +321,7 @@ function renderSmsPage(c) {
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div class="card-title">메시지 내용</div>
                         <div style="display:flex;gap:6px;">
-                            <button class="btn btn-sm btn-secondary" onclick="handleSmsImageUpload()">📎 이미지</button>
+                            <button class="btn btn-sm btn-secondary" onclick="handleSmsImageUpload()">📎 첨부</button>
                             <button class="btn btn-sm btn-secondary" onclick="openTemplateSelect()">📋 템플릿</button>
                             <button class="btn btn-sm btn-accent" onclick="openAiGenerate()">✨ AI 작성</button>
                         </div>
@@ -1464,11 +1464,11 @@ async function saveAdminTemplateToMine(title, content) {
 function uploadImage(callback) {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.hwp,.txt,.zip';
     input.onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (file.size > 5 * 1024 * 1024) { showToast('5MB 이하 이미지만 가능합니다', 'error'); return; }
+        if (file.size > 5 * 1024 * 1024) { showToast('5MB 이하 파일만 가능합니다', 'error'); return; }
 
         const reader = new FileReader();
         reader.onload = async () => {
@@ -1478,7 +1478,7 @@ function uploadImage(callback) {
                     body: JSON.stringify({ data: reader.result, fileName: file.name })
                 });
                 callback(res);
-            } catch(e) { showToast('이미지 업로드 실패: ' + e.message, 'error'); }
+            } catch(e) { showToast('파일 업로드 실패: ' + e.message, 'error'); }
         };
         reader.readAsDataURL(file);
     };
@@ -1487,13 +1487,22 @@ function uploadImage(callback) {
 
 function handleSmsImageUpload() {
     uploadImage((res) => {
-        // Insert short link into message textarea
         const textarea = document.getElementById('smsMessage');
         const currentVal = textarea.value;
-        textarea.value = currentVal + (currentVal ? '\n' : '') + res.previewUrl;
+        const isImage = (res.fileType || 'image') === 'image';
+        const linkUrl = res.downloadUrl || res.previewUrl;
+
+        if (isImage) {
+            // 이미지: 미리보기 URL 삽입
+            textarea.value = currentVal + (currentVal ? '\n' : '') + linkUrl;
+        } else {
+            // 파일: 파일명 + 다운로드 링크 삽입
+            const displayName = res.originalName || res.fileName;
+            textarea.value = currentVal + (currentVal ? '\n' : '') + displayName + '\n' + linkUrl;
+        }
         updateCharCount();
 
-        // Show thumbnail preview
+        // Show preview
         let previewContainer = document.getElementById('imagePreviewContainer');
         if (!previewContainer) {
             previewContainer = document.createElement('div');
@@ -1501,12 +1510,20 @@ function handleSmsImageUpload() {
             previewContainer.className = 'image-preview-container';
             textarea.parentNode.insertBefore(previewContainer, textarea.nextSibling);
         }
+
         const thumb = document.createElement('div');
         thumb.className = 'image-thumb';
-        thumb.innerHTML = `<img src="${res.publicUrl}" onclick="showImageFullscreen('${res.publicUrl}')"><span class="image-thumb-remove" onclick="event.stopPropagation();this.parentNode.remove()">&times;</span>`;
+        if (isImage) {
+            thumb.innerHTML = `<img src="${res.publicUrl}" onclick="showImageFullscreen('${res.publicUrl}')"><span class="image-thumb-remove" onclick="event.stopPropagation();this.parentNode.remove()">&times;</span>`;
+        } else {
+            // 파일: 아이콘 + 파일명 표시
+            const displayName = res.originalName || res.fileName;
+            thumb.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13px;';
+            thumb.innerHTML = `<span style="font-size:24px;">&#128196;</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(displayName)}</span><span class="image-thumb-remove" onclick="event.stopPropagation();this.parentNode.remove()" style="cursor:pointer;color:var(--red);font-size:16px;margin-left:4px;">&times;</span>`;
+        }
         previewContainer.appendChild(thumb);
 
-        showToast('이미지 업로드 완료');
+        showToast('파일 업로드 완료');
     });
 }
 
@@ -1515,7 +1532,7 @@ function handleTemplateImageUpload() {
         const textarea = document.getElementById('tplContent');
         const currentVal = textarea.value;
         textarea.value = currentVal + (currentVal ? '\n' : '') + res.previewUrl;
-        showToast('이미지 업로드 완료');
+        showToast('파일 업로드 완료');
     });
 }
 

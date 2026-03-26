@@ -202,8 +202,20 @@ fun Route.userPortalRoutes(smsService: WideshotSmsService) {
                     }
                 }
 
-                // FCM 푸시
-                fcmService.notifySmsBatch(fcmToken, jobId, recipients.size)
+                // FCM 푸시 (메시지 내용 포함 → 앱이 서버 재호출 불필요)
+                val pendingMsgs = transaction {
+                    PendingSmsTable.selectAll()
+                        .where { PendingSmsTable.jobId eq jobId }
+                        .map { row ->
+                            mapOf(
+                                "id" to row[PendingSmsTable.id],
+                                "phone" to row[PendingSmsTable.recipientPhone],
+                                "name" to (row[PendingSmsTable.recipientName] ?: ""),
+                                "message" to row[PendingSmsTable.messageContent]
+                            )
+                        }
+                }
+                fcmService.notifySmsBatch(fcmToken, jobId, recipients.size, pendingMsgs)
 
                 val etaText = if (etaMinutes == 0) "즉시 발송" else "약 ${etaMinutes}분 소요"
                 call.respond(HttpStatusCode.OK, mapOf(
@@ -448,6 +460,19 @@ fun Route.userPortalRoutes(smsService: WideshotSmsService) {
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 30
             val offset = ((page - 1) * limit).toLong()
             try {
+                // Auto-complete pending messages older than 2 minutes (assume sent if no status update received)
+                transaction {
+                    val twoMinutesAgo = System.currentTimeMillis() - 120_000
+                    PendingSmsTable.update({
+                        (PendingSmsTable.userId eq userId) and
+                        (PendingSmsTable.status eq "pending") and
+                        (PendingSmsTable.createdAt less twoMinutesAgo)
+                    }) {
+                        it[status] = "sent"
+                        it[processedAt] = System.currentTimeMillis()
+                    }
+                }
+
                 val result = transaction {
                     // PendingSms (phone-based sends)
                     val pendingItems = PendingSmsTable.selectAll()
@@ -603,24 +628,39 @@ fun Route.userPortalRoutes(smsService: WideshotSmsService) {
                 }
 
                 val ext = originalName.substringAfterLast(".", "jpg")
+                val allowedExtensions = setOf("jpg", "jpeg", "png", "gif", "webp", "pdf", "doc", "docx", "xls", "xlsx", "hwp", "txt", "zip")
+                if (ext.lowercase() !in allowedExtensions) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "허용되지 않는 파일 형식입니다"))
+                    return@post
+                }
                 val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
                 val shortCode = (1..6).map { chars.random() }.joinToString("")
                 val fileName = "$shortCode.$ext"
+
+                // 이미지 vs 파일 구분
+                val imageExtensions = setOf("jpg", "jpeg", "png", "gif", "webp")
+                val isImage = ext.lowercase() in imageExtensions
+                val s3Prefix = if (isImage) "images" else "files"
 
                 // Base64 디코딩
                 val cleanBase64 = base64Data.substringAfter(",") // data:image/png;base64, 제거
                 val fileBytes = java.util.Base64.getDecoder().decode(cleanBase64)
 
                 // S3 업로드 (호스트 프록시 경유)
-                var publicUrl = "https://sm.on1.kr/uploads/$fileName"
-                val previewUrl = "https://sm.on1.kr/i/$fileName"
+                var publicUrl = "https://$S3_BUCKET.s3.ap-northeast-2.amazonaws.com/$s3Prefix/$fileName"
+                val previewUrl = if (isImage) "https://sm.on1.kr/i/$fileName" else "https://sm.on1.kr/f/$fileName"
+                val fileType = if (isImage) "image" else "file"
                 try {
                     val hexData = fileBytes.joinToString("") { "%02x".format(it) }
                     val contentType = when (ext.lowercase()) {
                         "png" -> "image/png"; "gif" -> "image/gif"
-                        "webp" -> "image/webp"; else -> "image/jpeg"
+                        "webp" -> "image/webp"; "pdf" -> "application/pdf"
+                        "doc" -> "application/msword"; "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        "xls" -> "application/vnd.ms-excel"; "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "hwp" -> "application/x-hwp"; "txt" -> "text/plain"; "zip" -> "application/zip"
+                        else -> "image/jpeg"
                     }
-                    val s3Payload = """{"fileName":"$fileName","hexData":"$hexData","contentType":"$contentType"}"""
+                    val s3Payload = """{"fileName":"$s3Prefix/$fileName","hexData":"$hexData","contentType":"$contentType"}"""
                     val s3Conn = java.net.URL("http://172.17.0.1:9878").openConnection() as java.net.HttpURLConnection
                     s3Conn.requestMethod = "POST"
                     s3Conn.setRequestProperty("Content-Type", "application/json")
@@ -645,7 +685,9 @@ fun Route.userPortalRoutes(smsService: WideshotSmsService) {
                     "fileName" to fileName,
                     "publicUrl" to publicUrl,
                     "previewUrl" to previewUrl,
-                    "originalName" to originalName
+                    "downloadUrl" to previewUrl,
+                    "originalName" to originalName,
+                    "fileType" to fileType
                 ))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "Upload failed")))
@@ -747,6 +789,28 @@ fun Route.userPortalRoutes(smsService: WideshotSmsService) {
             val title = json["title"]?.jsonPrimitive?.contentOrNull ?: ""
             val content = json["content"]?.jsonPrimitive?.contentOrNull ?: ""
             if (title.isBlank() || content.isBlank()) { call.respond(HttpStatusCode.BadRequest, mapOf("error" to "title and content required")); return@post }
+
+            // Check if template with same title already exists for this user
+            val existing = transaction {
+                MessageTemplatesTable.selectAll().where {
+                    (MessageTemplatesTable.userId eq userId) and (MessageTemplatesTable.title eq title)
+                }.firstOrNull()
+            }
+            if (existing != null) {
+                // Update existing template instead of creating duplicate
+                transaction {
+                    MessageTemplatesTable.update({
+                        MessageTemplatesTable.id eq existing[MessageTemplatesTable.id]
+                    }) {
+                        it[MessageTemplatesTable.content] = content
+                        it[category] = json["category"]?.jsonPrimitive?.contentOrNull
+                        it[updatedAt] = System.currentTimeMillis()
+                    }
+                }
+                call.respond(HttpStatusCode.OK, mapOf("id" to existing[MessageTemplatesTable.id], "message" to "Updated"))
+                return@post
+            }
+
             val id = UUID.randomUUID().toString()
             transaction {
                 MessageTemplatesTable.insert {

@@ -152,7 +152,8 @@ fun MessageDetailScreen(
                 selectedFileUri = null
                 selectedFileName = null
             } else {
-                // Non-image file → Firebase upload
+                // Non-image file → server upload
+                android.util.Log.d("MessageDetailScreen", "File selected: $uri, mimeType=$mimeType")
                 selectedFileUri = uri
                 selectedImageUris = emptyList()
                 // Get file name
@@ -326,6 +327,23 @@ fun MessageDetailScreen(
             }
         }
 
+        // 전송 중 표시
+        val isSending by viewModel.isSending.collectAsStateWithLifecycle()
+        if (isSending) {
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("파일 업로드 중...", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+
         // Message input
         MessageInput(
             selectedImageUris = selectedImageUris,
@@ -337,6 +355,7 @@ fun MessageDetailScreen(
                         selectedImageUris = emptyList()
                     }
                     selectedFileUri != null -> {
+                        android.util.Log.d("MessageDetailScreen", "Sending file: $selectedFileUri, name=$selectedFileName")
                         selectedFileUri?.let { uri -> viewModel.sendFileMessage(text, uri) }
                         selectedFileUri = null
                         selectedFileName = null

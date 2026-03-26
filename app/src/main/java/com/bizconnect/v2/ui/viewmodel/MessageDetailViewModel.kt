@@ -66,6 +66,8 @@ class MessageDetailViewModel @Inject constructor(
 
     private val _contactName = MutableStateFlow("")
     private val _phoneNumber = MutableStateFlow("")
+    private val _isSending = MutableStateFlow(false)
+    val isSending: StateFlow<Boolean> = _isSending
 
     // AI state
     private val _aiSummary = MutableStateFlow<String?>(null)
@@ -184,7 +186,9 @@ class MessageDetailViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val phoneNumber = _phoneNumber.value
             if (phoneNumber.isNotEmpty()) {
-                smsSender.sendMmsWithImage(phoneNumber, text, imageUri)
+                _isSending.value = true
+                try { smsSender.sendMmsWithImage(phoneNumber, text, imageUri) }
+                finally { _isSending.value = false }
             }
         }
     }
@@ -193,8 +197,9 @@ class MessageDetailViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val phoneNumber = _phoneNumber.value
             if (phoneNumber.isNotEmpty()) {
-                Log.d("MessageDetailVM", "Sending MMS with ${imageUris.size} images to $phoneNumber")
-                smsSender.sendMmsWithImages(phoneNumber, text, imageUris)
+                _isSending.value = true
+                try { smsSender.sendMmsWithImages(phoneNumber, text, imageUris) }
+                finally { _isSending.value = false }
             }
         }
     }
@@ -204,19 +209,24 @@ class MessageDetailViewModel @Inject constructor(
             val phoneNumber = _phoneNumber.value
             if (phoneNumber.isEmpty()) return@launch
 
+            _isSending.value = true
             Log.d("MessageDetailVM", "Uploading file and sending link to $phoneNumber")
 
-            val result = fileUploader.uploadFile(fileUri)
-            if (result.success) {
-                val sizeStr = fileUploader.formatFileSize(result.fileSize)
-                val messageBody = buildString {
-                    if (text.isNotBlank()) appendLine(text)
-                    append("${result.fileName}($sizeStr)\n${result.downloadUrl}")
+            try {
+                val result = fileUploader.uploadFile(fileUri)
+                if (result.success) {
+                    val sizeStr = fileUploader.formatFileSize(result.fileSize)
+                    val messageBody = buildString {
+                        if (text.isNotBlank()) appendLine(text)
+                        append("📎 ${result.fileName} ($sizeStr)\n${result.downloadUrl}")
+                    }
+                    smsSender.sendSms(phoneNumber, messageBody)
+                    Log.d("MessageDetailVM", "File message sent: ${result.fileName}")
+                } else {
+                    Log.e("MessageDetailVM", "File upload failed: ${result.errorMessage}")
                 }
-                smsSender.sendSms(phoneNumber, messageBody)
-                Log.d("MessageDetailVM", "File message sent: ${result.fileName}")
-            } else {
-                Log.e("MessageDetailVM", "File upload failed: ${result.errorMessage}")
+            } finally {
+                _isSending.value = false
             }
         }
     }

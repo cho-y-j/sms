@@ -26,6 +26,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
 import io.ktor.serialization.kotlinx.json.json
@@ -118,21 +119,33 @@ fun Application.bizConnectModule() {
         // Payment routes (public approve callback, protected prepare/cancel)
         paymentRoutes(nicePayService)
 
-        // 이미지 업로드 파일 서빙
+        // 이미지 서빙 (로컬 → S3 리다이렉트)
         get("/uploads/{file}") {
             val fileName = call.parameters["file"] ?: ""
             val file = java.io.File("/app/uploads/$fileName")
             if (file.exists()) {
                 call.respondFile(file)
             } else {
-                call.respond(HttpStatusCode.NotFound, "File not found")
+                // S3로 리다이렉트
+                val s3Bucket = System.getenv("S3_BUCKET") ?: "bizconnect-uploads"
+                call.respondRedirect("https://$s3Bucket.s3.ap-northeast-2.amazonaws.com/images/$fileName")
             }
+        }
+
+        // 파일 직접 다운로드
+        get("/f/{file}") {
+            val fileName = call.parameters["file"] ?: ""
+            val s3Bucket = System.getenv("S3_BUCKET") ?: "bizconnect-uploads"
+            // S3로 리다이렉트 (직접 다운로드)
+            call.respondRedirect("https://$s3Bucket.s3.ap-northeast-2.amazonaws.com/files/$fileName")
         }
 
         // 이미지 미리보기 (OG 태그 포함)
         get("/i/{file}") {
             val fileName = call.parameters["file"] ?: ""
-            val imageUrl = "https://sm.on1.kr/uploads/$fileName"
+            val s3Bucket = System.getenv("S3_BUCKET") ?: "bizconnect-uploads"
+            // S3에 있으면 S3 URL, 없으면 로컬
+            val imageUrl = "https://$s3Bucket.s3.ap-northeast-2.amazonaws.com/images/$fileName"
             val html = """<!DOCTYPE html><html><head>
                 <meta charset="UTF-8"><meta property="og:title" content="BizConnect">
                 <meta property="og:image" content="$imageUrl"><meta property="og:type" content="website">

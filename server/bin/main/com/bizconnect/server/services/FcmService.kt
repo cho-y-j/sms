@@ -169,14 +169,28 @@ class FcmService {
     }
 
     /**
-     * Send SMS batch notification to app
+     * Send SMS batch notification to app with message data included
+     * (앱이 서버에 다시 API 호출할 필요 없음 → 토큰 만료 문제 해결)
      */
-    fun notifySmsBatch(fcmToken: String, jobId: String, count: Int): Boolean {
-        return sendDataMessage(fcmToken, mapOf(
+    fun notifySmsBatch(fcmToken: String, jobId: String, count: Int,
+                       messages: List<Map<String, String>> = emptyList()): Boolean {
+        val data = mutableMapOf(
             "type" to "web_sms_batch",
             "jobId" to jobId,
             "count" to count.toString(),
             "timestamp" to System.currentTimeMillis().toString()
-        ))
+        )
+        // 메시지 내용을 FCM에 직접 포함 (JSON array 문자열)
+        if (messages.isNotEmpty()) {
+            val msgJson = buildJsonArray {
+                for (msg in messages) {
+                    addJsonObject {
+                        for ((k, v) in msg) put(k, v)
+                    }
+                }
+            }
+            data["messages"] = msgJson.toString()
+        }
+        return sendDataMessage(fcmToken, data)
     }
 }

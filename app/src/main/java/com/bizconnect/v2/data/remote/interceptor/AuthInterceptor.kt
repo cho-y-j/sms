@@ -84,13 +84,18 @@ class AuthInterceptor @Inject constructor(
             val refreshResponse = chain.proceed(refreshRequest)
 
             if (refreshResponse.isSuccessful) {
-                // Token refresh successful, parse new token
+                // Token refresh successful, parse new tokens
                 val responseBody = refreshResponse.body?.string()
                 if (responseBody != null) {
-                    // Extract access token from response and save it
+                    // Extract access token and refresh token from response and save them
                     val newAccessToken = parseAccessToken(responseBody)
+                    val newRefreshToken = parseRefreshToken(responseBody)
                     if (newAccessToken != null) {
                         appPreferences.saveAccessToken(newAccessToken)
+                        if (newRefreshToken != null) {
+                            appPreferences.setRefreshToken(newRefreshToken)
+                        }
+                        appPreferences.invalidateCache()
 
                         // Retry original request with new token
                         val retryRequest = originalRequest.newBuilder()
@@ -119,6 +124,16 @@ class AuthInterceptor @Inject constructor(
             pattern.find(responseBody)?.groupValues?.get(1)
         } catch (e: Exception) {
             Log.e("AuthInterceptor", "Failed to parse access token", e)
+            null
+        }
+    }
+
+    private fun parseRefreshToken(responseBody: String): String? {
+        return try {
+            val pattern = """"refreshToken"\s*:\s*"([^"]+)"""".toRegex()
+            pattern.find(responseBody)?.groupValues?.get(1)
+        } catch (e: Exception) {
+            Log.e("AuthInterceptor", "Failed to parse refresh token", e)
             null
         }
     }

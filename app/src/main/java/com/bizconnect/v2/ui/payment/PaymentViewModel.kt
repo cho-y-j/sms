@@ -3,6 +3,7 @@ package com.bizconnect.v2.ui.payment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.data.remote.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,11 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 data class PaymentUiState(
@@ -29,7 +28,8 @@ data class PaymentUiState(
 
 @HiltViewModel
 class PaymentViewModel @Inject constructor(
-    private val appPreferences: AppPreferences
+    private val appPreferences: AppPreferences,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     companion object {
@@ -40,18 +40,12 @@ class PaymentViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PaymentUiState())
     val uiState: StateFlow<PaymentUiState> = _uiState.asStateFlow()
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
-
     fun preparePayment(amount: Int, goodsName: String, paymentType: String, payMethod: String = "card") {
         viewModelScope.launch {
             _uiState.value = PaymentUiState(loading = true)
 
             try {
                 val result = withContext(Dispatchers.IO) {
-                    val token = appPreferences.getAccessToken()
                     val body = JSONObject().apply {
                         put("amount", amount)
                         put("goodsName", goodsName)
@@ -64,12 +58,13 @@ class PaymentViewModel @Inject constructor(
                         .addHeader("Content-Type", "application/json")
                         .post(body.toString().toRequestBody(JSON_TYPE))
 
-                    if (token != null) {
-                        requestBuilder.addHeader("Authorization", "Bearer $token")
+                    val response = if (appPreferences.getAccessToken() != null) {
+                        tokenManager.executeAuthenticated(requestBuilder)
+                    } else {
+                        tokenManager.getClient().newCall(requestBuilder.build()).execute()
                     }
-
-                    val response = client.newCall(requestBuilder.build()).execute()
                     val responseBody = response.body?.string() ?: "{}"
+                    response.close()
 
                     if (response.isSuccessful) {
                         val json = JSONObject(responseBody)

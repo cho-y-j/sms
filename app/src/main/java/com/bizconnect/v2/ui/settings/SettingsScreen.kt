@@ -52,16 +52,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import okhttp3.MediaType.Companion.toMediaType
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -320,57 +316,9 @@ fun SettingsScreen(
                     confirmButton = {
                         TextButton(onClick = {
                             showSyncDialog = false
-                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                val accessToken = viewModel.getAccessToken()
-                                if (accessToken.isNullOrBlank()) return@launch
-
-                                val cursor = context.contentResolver.query(
-                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                                    arrayOf(
-                                        android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                                        android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER
-                                    ), null, null, null
-                                )
-
-                                val contacts = mutableListOf<org.json.JSONObject>()
-                                val seenPhones = mutableSetOf<String>()
-                                cursor?.use {
-                                    while (it.moveToNext()) {
-                                        val n = it.getString(0) ?: continue
-                                        val p = it.getString(1)?.replace(Regex("[^0-9+]"), "") ?: continue
-                                        if (p.length < 10 || seenPhones.contains(p)) continue
-                                        seenPhones.add(p)
-                                        contacts.add(org.json.JSONObject().apply {
-                                            put("name", n); put("phone", p)
-                                        })
-                                    }
-                                }
-
-                                val payload = org.json.JSONObject().put("contacts", org.json.JSONArray(contacts))
-                                val request = okhttp3.Request.Builder()
-                                    .url("https://sm.on1.kr/api/user/contacts/import")
-                                    .addHeader("Authorization", "Bearer $accessToken")
-                                    .post(okhttp3.RequestBody.create(
-                                        "application/json".toMediaType(), payload.toString()))
-                                    .build()
-                                val resp = okhttp3.OkHttpClient().newCall(request).execute()
-                                val body = resp.body?.string() ?: ""
-                                resp.close()
-
-                                                withContext(Dispatchers.Main) {
-                                    val imported = try { org.json.JSONObject(body).optString("imported", "0") } catch (_: Exception) { "0" }
-                                    val existing = contacts.size - imported.toIntOrNull().let { it ?: 0 }
-                                    val msg = if (imported == "0") "모든 연락처가 이미 동기화되어 있습니다 (${contacts.size}건)"
-                                        else "신규 ${imported}건 추가 완료 (기존 ${existing}건은 이미 동기화됨)"
-                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    android.widget.Toast.makeText(context, "동기화 실패: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                }
+                            viewModel.syncContactsToServer { msg ->
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                             }
-                        }
                     }) { Text("동기화", color = SamsungBlue) }
                     },
                     dismissButton = {
