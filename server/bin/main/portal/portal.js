@@ -292,12 +292,12 @@ function renderSmsPage(c) {
 
         <div class="send-type-toggle">
             <div class="send-type-btn active" id="typePhone" onclick="setSendType('phone')">
-                <div class="send-type-icon">📱</div>
+                <div class="send-type-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
                 <div class="send-type-label">폰 발송 (무료)</div>
                 <div class="desc">내 폰으로 순차 발송<br>20건/분 속도</div>
             </div>
             <div class="send-type-btn" id="typePaid" onclick="setSendType('paid')">
-                <div class="send-type-icon">⚡</div>
+                <div class="send-type-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></div>
                 <div class="send-type-label">유료 즉시 발송</div>
                 <div class="desc">서버에서 즉시 발송<br>크레딧 차감</div>
             </div>

@@ -76,6 +76,10 @@ fun MessageDetailScreen(
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
+    // 문자 읽어주기(TTS) — 화면 생명주기에 묶인 컨트롤러 + 설정 플래그
+    val tts = com.bizconnect.v2.util.rememberTtsController()
+    val ttsEnabled = remember { viewModel.isTtsEnabled() }
+
     // AI state
     val aiSummary by viewModel.aiSummary.collectAsStateWithLifecycle()
     val aiEmotion by viewModel.aiEmotion.collectAsStateWithLifecycle()
@@ -319,6 +323,7 @@ fun MessageDetailScreen(
                         imageUrl = message.attachmentPath,
                         isRead = message.isRead,
                         status = message.status,
+                        onSpeak = if (ttsEnabled) ({ tts.speak(message.text) }) else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 2.dp)

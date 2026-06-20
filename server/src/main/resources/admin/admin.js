@@ -28,11 +28,11 @@ function showAdminWarning() {
         modal = document.createElement('div');
         modal.id = 'adminLogoutWarning';
         modal.innerHTML = `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;">
-            <div style="background:#fff;border-radius:16px;padding:32px;text-align:center;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <div style="background:var(--surface);border-radius:16px;padding:32px;text-align:center;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
                 <div style="font-size:40px;margin-bottom:12px;">🔒</div>
                 <div style="font-size:16px;font-weight:700;margin-bottom:8px;">관리자 자동 로그아웃</div>
-                <div style="color:#666;font-size:13px;margin-bottom:16px;">보안을 위해 <span id="adminCountdown" style="color:#e74c3c;font-weight:700;">60</span>초 후 자동 로그아웃됩니다.</div>
-                <button onclick="extendAdminSession()" style="background:#0381FE;color:#fff;border:none;padding:12px 32px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;width:100%;">계속 사용하기</button>
+                <div style="color:var(--text2);font-size:13px;margin-bottom:16px;">보안을 위해 <span id="adminCountdown" style="color:var(--red);font-weight:700;">60</span>초 후 자동 로그아웃됩니다.</div>
+                <button onclick="extendAdminSession()" style="background:var(--accent);color:#fff;border:none;padding:12px 32px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;width:100%;">계속 사용하기</button>
             </div>
         </div>`;
         document.body.appendChild(modal);
@@ -174,10 +174,10 @@ async function loadDashboard() {
         document.getElementById('contentArea').innerHTML = `
             <div class="page-header"><h1>대시보드</h1><p>서비스 현황 요약</p></div>
             <div class="stats-grid">
-                <div class="stat-card blue"><div class="stat-icon">👥</div><div class="stat-value">${formatNumber(data.totalUsers)}</div><div class="stat-label">전체 회원</div></div>
-                <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value">${formatNumber(data.activeUsers)}</div><div class="stat-label">활성 회원</div></div>
-                <div class="stat-card orange"><div class="stat-icon">💬</div><div class="stat-value">${formatNumber(data.todayMessages)}</div><div class="stat-label">오늘 발송 건수</div></div>
-                <div class="stat-card purple"><div class="stat-icon">💰</div><div class="stat-value">${formatCurrency(data.monthlyRevenue)}</div><div class="stat-label">이번 달 매출</div></div>
+                <div class="stat-card blue"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div class="stat-value">${formatNumber(data.totalUsers)}</div><div class="stat-label">전체 회원</div></div>
+                <div class="stat-card green"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></div><div class="stat-value">${formatNumber(data.activeUsers)}</div><div class="stat-label">활성 회원</div></div>
+                <div class="stat-card orange"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="stat-value">${formatNumber(data.todayMessages)}</div><div class="stat-label">오늘 발송 건수</div></div>
+                <div class="stat-card purple"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg></div><div class="stat-value">${formatCurrency(data.monthlyRevenue)}</div><div class="stat-label">이번 달 매출</div></div>
             </div>
             <div class="card">
                 <div class="card-title">최근 결제 내역</div>
@@ -193,7 +193,7 @@ async function loadDashboard() {
                                     <td>${paymentStatusBadge(p.status)}</td>
                                     <td>${formatDate(p.createdAt)}</td>
                                 </tr>
-                            `).join('') || '<tr class="no-hover"><td colspan="5" style="text-align:center;color:#888;">결제 내역이 없습니다</td></tr>'}
+                            `).join('') || '<tr class="no-hover"><td colspan="5" style="text-align:center;color:var(--text3);">결제 내역이 없습니다</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -239,7 +239,7 @@ async function loadUsers() {
                                     <td>${statusBadge(u.status)}</td>
                                     <td>${formatDateShort(u.createdAt)}</td>
                                 </tr>
-                            `).join('') || '<tr class="no-hover"><td colspan="6" style="text-align:center;color:#888;">회원이 없습니다</td></tr>'}
+                            `).join('') || '<tr class="no-hover"><td colspan="6" style="text-align:center;color:var(--text3);">회원이 없습니다</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -272,7 +272,7 @@ async function showUserDetail(userId) {
                 <div class="detail-row"><div class="detail-label">가입일</div><div class="detail-value">${formatDate(u.createdAt)}</div></div>
             </div>
             <div class="modal-actions" style="flex-direction:column;gap:12px;">
-                <div style="font-weight:600;font-size:13px;color:#888;">등급 변경</div>
+                <div style="font-weight:600;font-size:13px;color:var(--text3);">등급 변경</div>
                 <div class="form-row">
                     <select class="input" id="modalTier">
                         <option value="free" ${u.tier === 'free' ? 'selected' : ''}>무료</option>
@@ -282,13 +282,13 @@ async function showUserDetail(userId) {
                     <button class="btn btn-primary btn-sm" onclick="updateTier('${u.id}')">변경</button>
                 </div>
 
-                <div style="font-weight:600;font-size:13px;color:#888;margin-top:8px;">비밀번호 변경</div>
+                <div style="font-weight:600;font-size:13px;color:var(--text3);margin-top:8px;">비밀번호 변경</div>
                 <div class="form-row">
                     <input class="input" type="text" id="modalNewPassword" placeholder="새 비밀번호 (4자 이상)">
                     <button class="btn btn-primary btn-sm" onclick="changePassword('${u.id}')">변경</button>
                 </div>
 
-                <div style="font-weight:600;font-size:13px;color:#888;margin-top:8px;">크레딧 충전/차감</div>
+                <div style="font-weight:600;font-size:13px;color:var(--text3);margin-top:8px;">크레딧 충전/차감</div>
                 <div class="form-row">
                     <input class="input" type="number" id="modalCreditAmount" placeholder="금액 (음수=차감)">
                     <input class="input" type="text" id="modalCreditReason" placeholder="사유" value="관리자 수동 충전">
@@ -381,7 +381,7 @@ async function loadPayments() {
                                     <td>${paymentStatusBadge(p.status)}</td>
                                     <td>${formatDate(p.createdAt)}</td>
                                 </tr>
-                            `).join('') || '<tr class="no-hover"><td colspan="5" style="text-align:center;color:#888;">결제 내역이 없습니다</td></tr>'}
+                            `).join('') || '<tr class="no-hover"><td colspan="5" style="text-align:center;color:var(--text3);">결제 내역이 없습니다</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -440,9 +440,9 @@ async function fetchUsageRange() {
 
         chartEl.innerHTML = `
             <div class="chart-legend">
-                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#0381FE;"></div>SMS</div>
-                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#27ae60;"></div>LMS</div>
-                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#f39c12;"></div>MMS</div>
+                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--accent);"></div>SMS</div>
+                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--green);"></div>LMS</div>
+                <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--orange);"></div>MMS</div>
             </div>
             <div class="chart-container">
                 ${results.map(r => {
@@ -468,7 +468,7 @@ async function fetchUsageRange() {
                 <div class="stat-card orange"><div class="stat-value">${formatNumber(totalMms)}</div><div class="stat-label">MMS 발송</div></div>
                 <div class="stat-card purple"><div class="stat-value">${formatCurrency(totalCost)}</div><div class="stat-label">총 비용</div></div>
             </div>`;
-    } catch (e) { chartEl.innerHTML = `<div class="loading" style="color:#e74c3c;">데이터 로딩 실패: ${e.message}</div>`; }
+    } catch (e) { chartEl.innerHTML = `<div class="loading" style="color:var(--red);">데이터 로딩 실패: ${e.message}</div>`; }
 }
 
 // ===== Config =====
@@ -486,10 +486,10 @@ async function loadConfig() {
                                 <tr class="no-hover">
                                     <td><strong>${c.key}</strong></td>
                                     <td><input class="config-input" id="cfgVal_${i}" value="${escapeHtml(c.value || '')}"></td>
-                                    <td style="color:#888;font-size:12px;">${c.description || '-'}</td>
+                                    <td style="color:var(--text3);font-size:12px;">${c.description || '-'}</td>
                                     <td><button class="btn btn-primary btn-sm" onclick="saveConfig('${escapeHtml(c.key)}', document.getElementById('cfgVal_${i}').value)">저장</button></td>
                                 </tr>
-                            `).join('') || '<tr class="no-hover"><td colspan="4" style="text-align:center;color:#888;">설정 항목이 없습니다</td></tr>'}
+                            `).join('') || '<tr class="no-hover"><td colspan="4" style="text-align:center;color:var(--text3);">설정 항목이 없습니다</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -548,10 +548,10 @@ async function loadAdminTemplates() {
                     <button class="btn btn-primary" onclick="addTemplateCategory()">추가</button>
                 </div>
                 <div id="categoryList">
-                    ${adminCategories.length === 0 ? '<div style="color:#888;text-align:center;padding:20px;">카테고리가 없습니다</div>' :
+                    ${adminCategories.length === 0 ? '<div style="color:var(--text3);text-align:center;padding:20px;">카테고리가 없습니다</div>' :
                     adminCategories.map(c => `
-                        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;">
-                            <span>${c.icon || '📋'} <strong>${escapeHtml(c.name)}</strong> <span style="color:#888;font-size:11px;">(${adminTemplates.filter(t=>t.categoryId===c.id).length}개 템플릿)</span></span>
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+                            <span>${c.icon || '📋'} <strong>${escapeHtml(c.name)}</strong> <span style="color:var(--text3);font-size:11px;">(${adminTemplates.filter(t=>t.categoryId===c.id).length}개 템플릿)</span></span>
                             <button class="btn btn-danger btn-sm" onclick="deleteTemplateCategory('${c.id}')">삭제</button>
                         </div>
                     `).join('')}
@@ -581,14 +581,14 @@ async function loadAdminTemplates() {
                 return `
                 <div class="card">
                     <div class="card-title">${cat.icon||'📋'} ${escapeHtml(cat.name)}</div>
-                    ${catTemplates.length === 0 ? '<div style="color:#888;text-align:center;padding:12px;">템플릿이 없습니다</div>' :
+                    ${catTemplates.length === 0 ? '<div style="color:var(--text3);text-align:center;padding:12px;">템플릿이 없습니다</div>' :
                     `<div class="table-wrapper"><table>
                         <thead><tr><th>제목</th><th>내용 (미리보기)</th><th>작업</th></tr></thead>
                         <tbody>
                             ${catTemplates.map(t => `
                                 <tr class="no-hover">
                                     <td><strong>${escapeHtml(t.title)}</strong></td>
-                                    <td style="color:#666;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(typeof t.content === 'string' ? t.content.substring(0,80) : '')}</td>
+                                    <td style="color:var(--text2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(typeof t.content === 'string' ? t.content.substring(0,80) : '')}</td>
                                     <td style="white-space:nowrap;">
                                         <button class="btn btn-primary btn-sm" onclick="editAdminTemplate('${t.id}')">수정</button>
                                         <button class="btn btn-danger btn-sm" onclick="deleteAdminTemplate('${t.id}')">삭제</button>
@@ -602,7 +602,7 @@ async function loadAdminTemplates() {
 
             <!-- 편집 모달 -->
             <div class="modal-overlay" id="tplEditOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
-                <div style="background:#fff;border-radius:12px;padding:24px;width:500px;max-width:90vw;">
+                <div style="background:var(--surface);border-radius:12px;padding:24px;width:500px;max-width:90vw;">
                     <h3 style="margin:0 0 16px;">템플릿 수정</h3>
                     <select class="input" id="editTplCategory">
                         ${adminCategories.map(c => `<option value="${c.id}">${c.icon||'📋'} ${escapeHtml(c.name)}</option>`).join('')}
@@ -708,10 +708,10 @@ async function loadSmsMonitor() {
 
             <!-- 발송 현황 요약 -->
             <div class="stats-grid">
-                <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value">${formatNumber(todaySent)}</div><div class="stat-label">오늘 성공</div></div>
-                <div class="stat-card" style="background:linear-gradient(135deg,#fee2e2,#fecaca);"><div class="stat-icon">❌</div><div class="stat-value" style="color:#dc2626;">${formatNumber(todayFailed)}</div><div class="stat-label">오늘 실패</div></div>
-                <div class="stat-card blue"><div class="stat-icon">📊</div><div class="stat-value">${todayRate}%</div><div class="stat-label">성공률</div></div>
-                <div class="stat-card orange"><div class="stat-icon">📡</div><div class="stat-value">${formatNumber(todaySent + todayFailed)}</div><div class="stat-label">오늘 전체</div></div>
+                <div class="stat-card green"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></div><div class="stat-value">${formatNumber(todaySent)}</div><div class="stat-label">오늘 성공</div></div>
+                <div class="stat-card" style="border-color:var(--red);"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></div><div class="stat-value" style="color:var(--red);">${formatNumber(todayFailed)}</div><div class="stat-label">오늘 실패</div></div>
+                <div class="stat-card blue"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div><div class="stat-value">${todayRate}%</div><div class="stat-label">성공률</div></div>
+                <div class="stat-card orange"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="stat-value">${formatNumber(todaySent + todayFailed)}</div><div class="stat-label">오늘 전체</div></div>
             </div>
 
             <!-- 7일간 추이 -->
@@ -724,12 +724,12 @@ async function loadSmsMonitor() {
                             ${[...stats].reverse().filter(s => parseInt(s.total||'0') > 0).map(s => `
                                 <tr class="no-hover">
                                     <td>${s.date || '-'}</td>
-                                    <td style="color:#16a34a;font-weight:600;">${formatNumber(parseInt(s.sent||'0'))}</td>
-                                    <td style="color:#dc2626;font-weight:600;">${formatNumber(parseInt(s.failed||'0'))}</td>
+                                    <td style="color:var(--green);font-weight:600;">${formatNumber(parseInt(s.sent||'0'))}</td>
+                                    <td style="color:var(--red);font-weight:600;">${formatNumber(parseInt(s.failed||'0'))}</td>
                                     <td>${formatNumber(parseInt(s.total||'0'))}</td>
                                     <td><span class="badge badge-${parseInt(s.successRate||'0')>=90?'active':'suspended'}">${s.successRate||'0'}%</span></td>
                                 </tr>
-                            `).join('') || '<tr class="no-hover"><td colspan="5" style="text-align:center;color:#888;">아직 발송 이력이 없습니다</td></tr>'}
+                            `).join('') || '<tr class="no-hover"><td colspan="5" style="text-align:center;color:var(--text3);">아직 발송 이력이 없습니다</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -742,13 +742,13 @@ async function loadSmsMonitor() {
                     <table>
                         <thead><tr><th>에러코드</th><th>에러 메시지</th><th>발생 건수</th><th>마지막 발생</th></tr></thead>
                         <tbody>
-                            ${errors.length === 0 ? '<tr class="no-hover"><td colspan="4" style="text-align:center;color:#888;">에러 없음 👍</td></tr>' :
+                            ${errors.length === 0 ? '<tr class="no-hover"><td colspan="4" style="text-align:center;color:var(--text3);">에러 없음 👍</td></tr>' :
                             errors.map(e => `
                                 <tr class="no-hover">
-                                    <td><span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:4px;font-weight:600;font-size:12px;">${escapeHtml(e.errorCode||'UNKNOWN')}</span></td>
-                                    <td style="color:#666;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.errorMessage||'-')}</td>
-                                    <td style="font-weight:600;color:#dc2626;">${formatNumber(parseInt(e.count||'0'))}</td>
-                                    <td style="font-size:12px;color:#888;">${e.lastOccurred ? formatDate(parseInt(e.lastOccurred)) : '-'}</td>
+                                    <td><span style="background:var(--red-soft);color:var(--red);padding:2px 8px;border-radius:4px;font-weight:600;font-size:12px;">${escapeHtml(e.errorCode||'UNKNOWN')}</span></td>
+                                    <td style="color:var(--text2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.errorMessage||'-')}</td>
+                                    <td style="font-weight:600;color:var(--red);">${formatNumber(parseInt(e.count||'0'))}</td>
+                                    <td style="font-size:12px;color:var(--text3);">${e.lastOccurred ? formatDate(parseInt(e.lastOccurred)) : '-'}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -787,15 +787,15 @@ async function loadSmsLogs() {
                 <table>
                     <thead><tr><th>수신번호</th><th>메시지</th><th>상태</th><th>에러코드</th><th>에러사유</th><th>발송시간</th></tr></thead>
                     <tbody>
-                        ${logs.length === 0 ? '<tr class="no-hover"><td colspan="6" style="text-align:center;color:#888;">이력이 없습니다</td></tr>' :
+                        ${logs.length === 0 ? '<tr class="no-hover"><td colspan="6" style="text-align:center;color:var(--text3);">이력이 없습니다</td></tr>' :
                         logs.map(l => `
-                            <tr class="no-hover" style="${l.status==='failed'?'background:#fff5f5;':''}">
+                            <tr class="no-hover" style="${l.status==='failed'?'background:var(--red-soft);':''}">
                                 <td>${escapeHtml(l.recipientPhone||'-')}</td>
-                                <td style="color:#666;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.messagePreview||'-')}</td>
+                                <td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.messagePreview||'-')}</td>
                                 <td><span class="badge badge-${l.status==='sent'?'active':'suspended'}">${l.status==='sent'?'성공':'실패'}</span></td>
-                                <td style="font-size:11px;${l.status==='failed'?'color:#dc2626;font-weight:600;':''}">${escapeHtml(l.errorCode||'-')}</td>
-                                <td style="font-size:11px;color:#888;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.errorMessage||'-')}</td>
-                                <td style="font-size:11px;color:#888;">${l.sentAt ? formatDate(parseInt(l.sentAt)) : '-'}</td>
+                                <td style="font-size:11px;${l.status==='failed'?'color:var(--red);font-weight:600;':''}">${escapeHtml(l.errorCode||'-')}</td>
+                                <td style="font-size:11px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.errorMessage||'-')}</td>
+                                <td style="font-size:11px;color:var(--text3);">${l.sentAt ? formatDate(parseInt(l.sentAt)) : '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -807,7 +807,7 @@ async function loadSmsLogs() {
             <span>${smsMonitorState.page} / ${totalPages} (${formatNumber(total)}건)</span>
             <button onclick="smsMonitorState.page++;loadSmsLogs();" ${smsMonitorState.page >= totalPages ? 'disabled' : ''}>다음 &raquo;</button>`;
     } catch (e) {
-        document.getElementById('smsLogsTable').innerHTML = `<div class="loading" style="color:#e74c3c;">로딩 실패: ${e.message}</div>`;
+        document.getElementById('smsLogsTable').innerHTML = `<div class="loading" style="color:var(--red);">로딩 실패: ${e.message}</div>`;
     }
 }
 
@@ -823,12 +823,12 @@ async function loadAI() {
             <div class="page-header"><h1>AI 설정</h1><p>AI API 설정 및 통계</p></div>
             <div class="stats-grid">
                 <div class="stat-card blue">
-                    <div class="stat-icon">🤖</div>
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><path d="M8 16h.01"/><path d="M16 16h.01"/></svg></div>
                     <div class="stat-value">${formatNumber(usage.totalAiTokens || 0)}</div>
                     <div class="stat-label">오늘 AI 토큰 사용량</div>
                 </div>
                 <div class="stat-card green">
-                    <div class="stat-icon">📊</div>
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
                     <div class="stat-value">${formatNumber(usage.userCount || 0)}</div>
                     <div class="stat-label">오늘 활성 사용자</div>
                 </div>
@@ -907,7 +907,7 @@ function uploadAdminTemplateImageToEdit() {
 
 // ===== Helpers =====
 function escapeHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function showError(msg) { document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:#e74c3c;">오류: ${msg}</div>`; }
+function showError(msg) { document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:var(--red);">오류: ${msg}</div>`; }
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {

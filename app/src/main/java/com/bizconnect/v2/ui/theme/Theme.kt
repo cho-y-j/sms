@@ -73,7 +73,9 @@ private val LightColorScheme = lightColorScheme(
 fun BizConnectTheme(
     forceDarkMode: Boolean? = null,
     darkTheme: Boolean = forceDarkMode ?: isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    // 브랜드 일관성: 배경화면 기반 동적 색(Material You) 대신 정의된 라이트/다크 스킴을 사용.
+    // 사용자가 설정에서 다크 모드를 켜면 항상 같은 브랜드 다크 톤이 나오도록 한다.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

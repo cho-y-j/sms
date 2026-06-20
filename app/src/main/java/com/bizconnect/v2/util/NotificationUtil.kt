@@ -14,6 +14,7 @@ import com.bizconnect.v2.domain.ai.AiAssistant
 import com.bizconnect.v2.receiver.CallbackActionReceiver
 import com.bizconnect.v2.receiver.NotificationQuickReplyReceiver
 import com.bizconnect.v2.receiver.NotificationReplyReceiver
+import com.bizconnect.v2.receiver.WebSmsApprovalReceiver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
@@ -163,6 +164,58 @@ class NotificationUtil @Inject constructor(
         notificationManager.cancel(notifId)
     }
 
+    /**
+     * 웹에서 요청한 문자 배치를 발송하기 전, 사용자 승인을 받는 알림.
+     * [발송] 탭 시에만 실제 발송됨 → 자동 게이트웨이가 아니라 사용자 확인 발송임을 보장.
+     *
+     * @param jobId 작업 식별자(없으면 null)
+     * @param count 발송 대기 건수
+     * @param messagesJson FCM에 인라인 포함된 메시지(없으면 null → 승인 시 서버 조회)
+     * @param allPending true면 작업 구분 없이 대기 중인 모든 건을 발송(시작 시 폴러 경유)
+     */
+    fun showWebBatchApproval(jobId: String?, count: Int, messagesJson: String?, allPending: Boolean = false) {
+        val notifId = WEB_BATCH_BASE_ID + ((jobId ?: "all").hashCode() and 0xFFFF)
+
+        val approveIntent = Intent(context, WebSmsApprovalReceiver::class.java).apply {
+            action = WebSmsApprovalReceiver.ACTION_APPROVE
+            putExtra(WebSmsApprovalReceiver.EXTRA_JOB_ID, jobId)
+            putExtra(WebSmsApprovalReceiver.EXTRA_MESSAGES, messagesJson)
+            putExtra(WebSmsApprovalReceiver.EXTRA_ALL_PENDING, allPending)
+            putExtra(WebSmsApprovalReceiver.EXTRA_NOTIF_ID, notifId)
+        }
+        val approvePending = PendingIntent.getBroadcast(
+            context, notifId, approveIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val cancelIntent = Intent(context, WebSmsApprovalReceiver::class.java).apply {
+            action = WebSmsApprovalReceiver.ACTION_CANCEL
+            putExtra(WebSmsApprovalReceiver.EXTRA_NOTIF_ID, notifId)
+        }
+        val cancelPending = PendingIntent.getBroadcast(
+            context, notifId + 1, cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, "messages")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("웹 문자 ${count}건 발송 승인")
+            .setContentText("내 폰에서 ${count}건을 발송합니다. 확인 후 [발송]을 눌러주세요.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("웹에서 요청한 문자 ${count}건을 내 휴대폰으로 발송합니다.\n확인 후 [발송]을 누르면 전송됩니다."))
+            .addAction(R.drawable.ic_notification, "발송", approvePending)
+            .addAction(0, "취소", cancelPending)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .build()
+
+        notificationManager.notify(notifId, notification)
+    }
+
+    fun cancelWebBatchApproval(notifId: Int) {
+        notificationManager.cancel(notifId)
+    }
+
     fun showApprovalNotification(messageId: String, messageText: String) {
         val approveIntent = Intent(context, MainActivity::class.java).apply {
             action = "action.approve_message"
@@ -307,5 +360,6 @@ class NotificationUtil @Inject constructor(
         const val SEND_RESULT_NOTIFICATION_ID = 200
         const val APPOINTMENT_NOTIFICATION_ID = 300
         const val CALLBACK_CONFIRM_BASE_ID = 400000
+        const val WEB_BATCH_BASE_ID = 500000
     }
 }

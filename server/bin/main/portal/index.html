@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BizConnect - 웹 문자</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="/portal/portal.css">
 </head>
 <body>
@@ -29,11 +31,11 @@
         <div class="topbar-inner">
             <a href="/portal" class="logo-sm">Biz<span>Connect</span></a>
             <nav class="tabs">
-                <button class="tab active" data-page="sms" onclick="navigate('sms')">문자 보내기</button>
-                <button class="tab" data-page="contacts" onclick="navigate('contacts')">연락처</button>
-                <button class="tab" data-page="templates" onclick="navigate('templates')">템플릿</button>
-                <button class="tab" data-page="history" onclick="navigate('history')">발송 이력</button>
-                <button class="tab" data-page="account" onclick="navigate('account')">내 계정</button>
+                <button class="tab active" data-page="sms" onclick="navigate('sms')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="tab-txt">문자 보내기</span><span class="tab-short">문자</span></button>
+                <button class="tab" data-page="contacts" onclick="navigate('contacts')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="tab-txt">연락처</span><span class="tab-short">연락처</span></button>
+                <button class="tab" data-page="templates" onclick="navigate('templates')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span class="tab-txt">템플릿</span><span class="tab-short">템플릿</span></button>
+                <button class="tab" data-page="history" onclick="navigate('history')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg><span class="tab-txt">발송 이력</span><span class="tab-short">이력</span></button>
+                <button class="tab" data-page="account" onclick="navigate('account')"><svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg><span class="tab-txt">내 계정</span><span class="tab-short">계정</span></button>
             </nav>
             <button class="btn-logout" onclick="doLogout()">로그아웃</button>
         </div>

@@ -150,6 +150,11 @@
             android:name=".receiver.CallbackActionReceiver"
             android:exported="false" />
 
+        <!-- Web SMS Batch Approval Receiver (웹 배치 발송 / 취소) -->
+        <receiver
+            android:name=".receiver.WebSmsApprovalReceiver"
+            android:exported="false" />
+
         <!-- SMS Delivery Status Receiver -->
         <receiver android:name=".receiver.SmsDeliveryReceiver"
             android:exported="false">

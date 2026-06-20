@@ -6,15 +6,23 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
@@ -53,9 +61,11 @@ fun MessageBubble(
     imageUrl: String? = null,
     isRead: Boolean = false,
     status: Int = Telephony.Sms.STATUS_COMPLETE,
+    onSpeak: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val isDark = isSystemInDarkTheme()
+    // 적용된 테마(시스템/강제 다크 포함)의 표면 밝기로 다크 여부 판단 → 강제 다크 모드에서도 버블 색이 따라온다.
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
 
@@ -162,8 +172,10 @@ fun MessageBubble(
                 }
             }
 
-            // Timestamp + send status
-            if (timestamp.isNotEmpty() || (isSent && status == Telephony.Sms.STATUS_PENDING)) {
+            // Timestamp + send status + 읽어주기
+            if (timestamp.isNotEmpty() || onSpeak != null || (isSent && status == Telephony.Sms.STATUS_PENDING)) {
+                val footerTint = if (textColor == Color.White) Color.White.copy(alpha = 0.7f)
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 4.dp)
@@ -187,12 +199,27 @@ fun MessageBubble(
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFFF5252)
                         )
-                    } else {
+                    } else if (timestamp.isNotEmpty()) {
                         // 정상 — 시간만 표시
                         Text(
                             text = timestamp,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (textColor == Color.White) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = footerTint
+                        )
+                    }
+
+                    // 문자 읽어주기 버튼
+                    if (onSpeak != null && text.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = "메시지 읽어주기",
+                            tint = footerTint,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .clickable { onSpeak() }
+                                .padding(5.dp)
                         )
                     }
                 }

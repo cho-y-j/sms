@@ -64,6 +64,9 @@ class AppPreferences @Inject constructor(
         // Default-SMS-app onboarding (one-time first-launch prompt)
         private val KEY_DEFAULT_SMS_PROMPTED = booleanPreferencesKey("default_sms_prompted")
 
+        // Accessibility: 문자 읽어주기 (TTS)
+        private val KEY_TTS_ENABLED = booleanPreferencesKey("tts_enabled")
+
         // Engine keys
         private val KEY_QUEUE_THROTTLE_MS = longPreferencesKey("queue_throttle_ms")
         private val KEY_LIMIT_MODE = stringPreferencesKey("limit_mode")
@@ -305,4 +308,10 @@ class AppPreferences @Inject constructor(
     fun wasDefaultSmsPrompted(): Boolean = readSync(KEY_DEFAULT_SMS_PROMPTED, false)
 
     fun setDefaultSmsPrompted(prompted: Boolean) = writeSync(KEY_DEFAULT_SMS_PROMPTED, prompted)
+
+    // --- Accessibility: 문자 읽어주기 (TTS) ---
+
+    fun isTtsEnabled(): Boolean = readSync(KEY_TTS_ENABLED, true)
+
+    fun setTtsEnabled(enabled: Boolean) = writeSync(KEY_TTS_ENABLED, enabled)
 }

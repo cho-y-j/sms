@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,13 +33,18 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -60,6 +66,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -89,6 +96,12 @@ fun SettingsScreen(
         // Reflect the new state immediately so the subtitle updates after the dialog.
         isDefaultSmsApp = com.bizconnect.v2.util.DefaultSmsApp.isDefault(context)
     }
+
+    // 회원 탈퇴 다이얼로그 상태
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var deleteEmail by remember { mutableStateOf("") }
+    var deletePassword by remember { mutableStateOf("") }
+    var deleteInProgress by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -215,12 +228,38 @@ fun SettingsScreen(
                 Text("크게", style = MaterialTheme.typography.labelSmall)
             }
 
+            // 글자 크기 빠른 선택 (프리셋)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FontPresetButton("작게", 0.85f, uiState.fontScale, Modifier.weight(1f)) { viewModel.updateFontScale(it) }
+                FontPresetButton("보통", 1.0f, uiState.fontScale, Modifier.weight(1f)) { viewModel.updateFontScale(it) }
+                FontPresetButton("크게", 1.2f, uiState.fontScale, Modifier.weight(1f)) { viewModel.updateFontScale(it) }
+                FontPresetButton("아주크게", 1.5f, uiState.fontScale, Modifier.weight(1f)) { viewModel.updateFontScale(it) }
+            }
+
             SettingsToggle(
                 icon = Icons.Default.DarkMode,
                 title = "다크 모드",
                 subtitle = if (uiState.isDarkMode) "켜짐" else "시스템 설정 따르기",
                 isChecked = uiState.isDarkMode,
                 onCheckedChange = { viewModel.updateDarkMode(it) }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // === 접근성 ===
+            SettingsSectionHeader("접근성")
+
+            SettingsToggle(
+                icon = Icons.Default.VolumeUp,
+                title = "문자 읽어주기",
+                subtitle = if (uiState.ttsEnabled) "대화 화면에서 메시지를 음성으로 들을 수 있어요" else "꺼짐",
+                isChecked = uiState.ttsEnabled,
+                onCheckedChange = { viewModel.updateTtsEnabled(it) }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -403,7 +442,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // === 로그아웃 (로그인 시에만) ===
+            // === 로그아웃 / 회원 탈퇴 (로그인 시에만) ===
             if (isLoggedIn) {
                 SettingsItem(
                     icon = Icons.Default.Logout,
@@ -415,10 +454,70 @@ fun SettingsScreen(
                         android.widget.Toast.makeText(context, "로그아웃 되었습니다", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 )
+
+                SettingsItem(
+                    icon = Icons.Default.PersonRemove,
+                    title = "회원 탈퇴",
+                    subtitle = "계정과 모든 데이터를 영구 삭제",
+                    isDestructive = true,
+                    onClick = { showDeleteAccountDialog = true }
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // 회원 탈퇴 확인 다이얼로그 (이메일+비밀번호 재확인 — 파괴적 작업)
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!deleteInProgress) showDeleteAccountDialog = false },
+            title = { Text("회원 탈퇴") },
+            text = {
+                Column {
+                    Text(
+                        "탈퇴하면 계정과 서버에 저장된 데이터(문자·연락처·발송 이력 등)가 영구 삭제되며 복구할 수 없습니다.\n\n확인을 위해 이메일과 비밀번호를 입력해 주세요.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = deleteEmail,
+                        onValueChange = { deleteEmail = it },
+                        label = { Text("이메일") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = deletePassword,
+                        onValueChange = { deletePassword = it },
+                        label = { Text("비밀번호") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleteInProgress && deleteEmail.isNotBlank() && deletePassword.isNotBlank(),
+                    onClick = {
+                        deleteInProgress = true
+                        viewModel.deleteAccount(deleteEmail, deletePassword) { ok, msg ->
+                            deleteInProgress = false
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                            if (ok) {
+                                showDeleteAccountDialog = false
+                                onBackClick()
+                            }
+                        }
+                    }
+                ) { Text("탈퇴", color = SamsungRed) }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleteInProgress, onClick = { showDeleteAccountDialog = false }) { Text("취소") }
+            }
+        )
     }
 }
 
@@ -511,6 +610,35 @@ fun SettingsToggle(
             }
         }
         Switch(checked = isChecked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun FontPresetButton(
+    label: String,
+    scale: Float,
+    currentScale: Float,
+    modifier: Modifier = Modifier,
+    onSelect: (Float) -> Unit
+) {
+    // 현재 스케일이 이 프리셋에 가장 가까우면 선택 상태로 표시
+    val selected = kotlin.math.abs(currentScale - scale) < 0.075f
+    if (selected) {
+        FilledTonalButton(
+            onClick = { onSelect(scale) },
+            modifier = modifier,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+        ) {
+            Text(label, fontSize = 12.sp, maxLines = 1)
+        }
+    } else {
+        OutlinedButton(
+            onClick = { onSelect(scale) },
+            modifier = modifier,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+        ) {
+            Text(label, fontSize = 12.sp, maxLines = 1)
+        }
     }
 }
 

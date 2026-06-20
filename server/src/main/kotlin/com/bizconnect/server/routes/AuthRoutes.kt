@@ -5,6 +5,7 @@ import com.bizconnect.server.database.UsersTable
 import com.bizconnect.server.database.RefreshTokensTable
 import com.bizconnect.server.database.SubscriptionsTable
 import com.bizconnect.server.database.TrustedDevicesTable
+import com.bizconnect.server.database.*
 import com.bizconnect.server.security.*
 import com.bizconnect.server.services.PhoneVerificationService
 import io.ktor.server.application.call
@@ -620,18 +621,67 @@ fun Route.authRoutes(
                 val ipAddress = call.request.local.remoteHost
                 val userAgent = call.request.headers["User-Agent"] ?: "unknown"
 
-                auditLogger.log(
-                    userId = null,
-                    action = "ACCOUNT_DELETED",
-                    details = "User requested account deletion",
-                    ipAddress = ipAddress,
-                    userAgent = userAgent
-                )
+                // 본인 확인(이메일+비밀번호) 후 사용자 데이터 전체 삭제
+                val result = transaction {
+                    val user = UsersTable.selectAll()
+                        .where { UsersTable.email eq request.email.trim() }
+                        .firstOrNull() ?: return@transaction "NOT_FOUND"
 
-                call.respond(
-                    HttpStatusCode.OK,
-                    mapOf("message" to "Account deleted successfully")
-                )
+                    val userId = user[UsersTable.id]
+                    val passwordHash = user[UsersTable.passwordHash]
+                    if (!passwordManager.verifyPassword(request.password, passwordHash)) {
+                        return@transaction "BAD_PASSWORD"
+                    }
+
+                    // 관련 데이터 모두 삭제 (FK 순서: 자식 → 부모)
+                    PendingSmsTable.deleteWhere { PendingSmsTable.userId eq userId }
+                    SmsSendJobsTable.deleteWhere { SmsSendJobsTable.userId eq userId }
+                    UserSmsHistoryTable.deleteWhere { UserSmsHistoryTable.userId eq userId }
+                    ScheduledSmsTable.deleteWhere { ScheduledSmsTable.userId eq userId }
+                    ScheduledMessagesTable.deleteWhere { ScheduledMessagesTable.userId eq userId }
+                    UserContactsTable.deleteWhere { UserContactsTable.userId eq userId }
+                    UserCategoriesTable.deleteWhere { UserCategoriesTable.userId eq userId }
+                    MessageTemplatesTable.deleteWhere { MessageTemplatesTable.userId eq userId }
+                    CreditBalancesTable.deleteWhere { CreditBalancesTable.userId eq userId }
+                    SubscriptionsTable.deleteWhere { SubscriptionsTable.userId eq userId }
+                    SmsLogsTable.deleteWhere { SmsLogsTable.userId eq userId }
+                    PaymentsTable.deleteWhere { PaymentsTable.userId eq userId }
+                    NicePaymentsTable.deleteWhere { NicePaymentsTable.userId eq userId }
+                    DailyUsageTable.deleteWhere { DailyUsageTable.userId eq userId }
+                    TrustedDevicesTable.deleteWhere { TrustedDevicesTable.userId eq userId }
+                    RefreshTokensTable.deleteWhere { RefreshTokensTable.userId eq userId }
+                    UsersTable.deleteWhere { UsersTable.id eq userId }
+                    userId
+                }
+
+                when (result) {
+                    "NOT_FOUND", "BAD_PASSWORD" -> {
+                        auditLogger.log(
+                            userId = null,
+                            action = "ACCOUNT_DELETE_FAILED",
+                            details = "reason=$result",
+                            ipAddress = ipAddress,
+                            userAgent = userAgent
+                        )
+                        call.respond(
+                            HttpStatusCode.Unauthorized,
+                            mapOf("error" to "이메일 또는 비밀번호가 올바르지 않습니다")
+                        )
+                    }
+                    else -> {
+                        auditLogger.log(
+                            userId = result,
+                            action = "ACCOUNT_DELETED",
+                            details = "User requested account deletion (all data removed)",
+                            ipAddress = ipAddress,
+                            userAgent = userAgent
+                        )
+                        call.respond(
+                            HttpStatusCode.OK,
+                            mapOf("message" to "Account deleted successfully")
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.BadRequest,

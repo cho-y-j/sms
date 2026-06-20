@@ -60,6 +60,12 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var tokenManager: TokenManager
 
+    @Inject
+    lateinit var webSmsBatchSender: com.bizconnect.v2.service.WebSmsBatchSender
+
+    @Inject
+    lateinit var notificationUtil: com.bizconnect.v2.util.NotificationUtil
+
     private var isDefaultSmsApp by mutableStateOf(false)
     private var contentObserver: ContentObserver? = null
 
@@ -375,54 +381,15 @@ class MainActivity : ComponentActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val requestBuilder = okhttp3.Request.Builder()
-                    .url("https://sm.on1.kr/api/user/sms/pending")
-                    .get()
-                val resp = tokenManager.executeAuthenticated(requestBuilder)
-                val body = resp.body?.string() ?: ""
-                resp.close()
-
-                val json = org.json.JSONObject(body)
-                val data = json.optJSONArray("data") ?: return@launch
-                val count = data.length()
+                val count = webSmsBatchSender.pendingCount()
                 if (count == 0) return@launch
+                Log.d("PendingSync", "Found $count pending web messages")
 
-                Log.d("PendingSync", "Found $count pending messages, processing...")
-
-                val smsManager = if (Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                    applicationContext.getSystemService(android.telephony.SmsManager::class.java)
+                // 정책 준수: 2건 이상은 사용자가 푸시에서 [발송] 승인해야만 전송. 1건만 즉시 발송.
+                if (count >= 2) {
+                    notificationUtil.showWebBatchApproval(jobId = null, count = count, messagesJson = null, allPending = true)
                 } else {
-                    @Suppress("DEPRECATION")
-                    android.telephony.SmsManager.getDefault()
-                }
-
-                for (i in 0 until count) {
-                    val msg = data.getJSONObject(i)
-                    val msgId = msg.getString("id")
-                    val phone = msg.getString("phone")
-                    val msgBody = msg.getString("message")
-
-                    if (i > 0) kotlinx.coroutines.delay(3000) // 3초 간격
-
-                    try {
-                        val parts = smsManager.divideMessage(msgBody)
-                        if (parts.size == 1) smsManager.sendTextMessage(phone, null, msgBody, null, null)
-                        else smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
-
-                        // Report success
-                        val statusBody = org.json.JSONObject().put("status", "sent").toString()
-                        val statusReqBuilder = okhttp3.Request.Builder()
-                            .url("https://sm.on1.kr/api/user/sms/$msgId/status")
-                            .put(okhttp3.RequestBody.create("application/json".toMediaType(), statusBody))
-                        tokenManager.executeAuthenticated(statusReqBuilder).close()
-                        Log.d("PendingSync", "Sent pending SMS $msgId to $phone")
-                    } catch (e: Exception) {
-                        val statusBody = org.json.JSONObject().put("status", "failed").put("error", e.message ?: "").toString()
-                        val statusReqBuilder = okhttp3.Request.Builder()
-                            .url("https://sm.on1.kr/api/user/sms/$msgId/status")
-                            .put(okhttp3.RequestBody.create("application/json".toMediaType(), statusBody))
-                        try { tokenManager.executeAuthenticated(statusReqBuilder).close() } catch (_: Exception) { }
-                    }
+                    webSmsBatchSender.sendAllPending()
                 }
             } catch (e: Exception) {
                 Log.e("PendingSync", "Failed to process pending messages", e)

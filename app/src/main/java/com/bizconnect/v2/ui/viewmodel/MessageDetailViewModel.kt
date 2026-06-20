@@ -40,10 +40,14 @@ class MessageDetailViewModel @Inject constructor(
     private val notificationUtil: NotificationUtil,
     private val smsSender: SmsSender,
     private val fileUploader: FileUploader,
-    private val aiAssistant: AiAssistant
+    private val aiAssistant: AiAssistant,
+    private val appPreferences: com.bizconnect.v2.data.preferences.AppPreferences
 ) : ViewModel() {
 
     private val threadId: Long = savedStateHandle.get<Long>("threadId") ?: 0L
+
+    /** 문자 읽어주기(TTS) 활성 여부 — 설정에서 토글. */
+    fun isTtsEnabled(): Boolean = appPreferences.isTtsEnabled()
 
     data class UiState(
         val messages: List<MessageUiModel> = emptyList(),

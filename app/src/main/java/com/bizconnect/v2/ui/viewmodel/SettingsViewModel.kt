@@ -32,6 +32,7 @@ class SettingsViewModel @Inject constructor(
     data class UiState(
         val isDarkMode: Boolean = false,
         val fontScale: Float = 1.0f,
+        val ttsEnabled: Boolean = true,
         val notificationsEnabled: Boolean = true,
         val dailyLimit: Int = 499,
         val isAutoApproval: Boolean = false,
@@ -41,6 +42,7 @@ class SettingsViewModel @Inject constructor(
     private object PreferencesKeys {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val FONT_SCALE = floatPreferencesKey("font_scale")
+        val TTS_ENABLED = booleanPreferencesKey("tts_enabled")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         val DAILY_LIMIT = intPreferencesKey("daily_limit")
         val AUTO_APPROVAL = booleanPreferencesKey("auto_approval")
@@ -52,6 +54,7 @@ class SettingsViewModel @Inject constructor(
             UiState(
                 isDarkMode = preferences[PreferencesKeys.DARK_MODE] ?: false,
                 fontScale = preferences[PreferencesKeys.FONT_SCALE] ?: 1.0f,
+                ttsEnabled = preferences[PreferencesKeys.TTS_ENABLED] ?: true,
                 notificationsEnabled = preferences[PreferencesKeys.NOTIFICATIONS_ENABLED] ?: true,
                 dailyLimit = preferences[PreferencesKeys.DAILY_LIMIT] ?: 499,
                 isAutoApproval = preferences[PreferencesKeys.AUTO_APPROVAL] ?: false,
@@ -76,6 +79,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             dataStore.edit { preferences ->
                 preferences[PreferencesKeys.FONT_SCALE] = scale
+            }
+        }
+    }
+
+    fun updateTtsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStore.edit { preferences ->
+                preferences[PreferencesKeys.TTS_ENABLED] = enabled
             }
         }
     }
@@ -115,6 +126,33 @@ class SettingsViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             appPreferences.clearAuth()
+        }
+    }
+
+    /**
+     * 회원 탈퇴 (계정 삭제). Google Play 정책상 인앱 삭제 경로 필수.
+     * 서버 DELETE /api/auth/account (email+password 확인) 호출 후 로컬 인증정보 삭제.
+     */
+    fun deleteAccount(email: String, password: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val payload = org.json.JSONObject()
+                    .put("email", email.trim())
+                    .put("password", password)
+                    .toString()
+                val req = okhttp3.Request.Builder()
+                    .url("https://sm.on1.kr/api/auth/account")
+                    .delete(okhttp3.RequestBody.create("application/json".toMediaType(), payload))
+                val resp = tokenManager.executeAuthenticated(req)
+                val ok = resp.isSuccessful
+                resp.close()
+                if (ok) appPreferences.clearAuth()
+                launch(Dispatchers.Main) {
+                    onResult(ok, if (ok) "회원 탈퇴가 완료되었습니다" else "탈퇴 실패: 이메일/비밀번호를 확인해 주세요")
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) { onResult(false, "탈퇴 실패: ${e.message}") }
+            }
         }
     }
 

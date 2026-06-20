@@ -60,6 +60,12 @@ class BizConnectFcmService : FirebaseMessagingService() {
     @Inject
     lateinit var tokenManager: TokenManager
 
+    @Inject
+    lateinit var webSmsBatchSender: WebSmsBatchSender
+
+    @Inject
+    lateinit var notificationUtil: com.bizconnect.v2.util.NotificationUtil
+
     private val scope = CoroutineScope(Dispatchers.Default)
 
     override fun onDestroy() {
@@ -266,172 +272,32 @@ class BizConnectFcmService : FirebaseMessagingService() {
      * and reports status back to server after each send.
      */
     private fun handleWebSmsBatch(data: Map<String, String>) {
-        scope.launch {
-            val jobId = data["jobId"]
-            val count = data["count"]?.toIntOrNull() ?: 0
+        val jobId = data["jobId"]
+        if (jobId.isNullOrEmpty()) {
+            Log.e(TAG, "web_sms_batch: missing jobId")
+            return
+        }
+        val messagesJson = data["messages"]
+        // 건수: 인라인 메시지가 있으면 그 길이, 없으면 count 필드
+        val inlineCount = if (!messagesJson.isNullOrBlank()) {
+            try { JSONArray(messagesJson).length() } catch (_: Exception) { -1 }
+        } else -1
+        val count = if (inlineCount >= 0) inlineCount else (data["count"]?.toIntOrNull() ?: 0)
 
-            if (jobId.isNullOrEmpty()) {
-                Log.e(TAG, "web_sms_batch: missing jobId")
-                return@launch
-            }
+        Log.d(TAG, "web_sms_batch: jobId=$jobId, count=$count")
 
-            Log.d(TAG, "web_sms_batch: jobId=$jobId, expected count=$count")
-
-            try {
-                // Step 1: FCM 데이터에 메시지가 포함되어 있으면 바로 사용 (서버 재호출 불필요)
-                val messagesJson = data["messages"]
-                val pendingMessages: List<JSONObject> = if (!messagesJson.isNullOrBlank()) {
-                    try {
-                        val arr = JSONArray(messagesJson)
-                        (0 until arr.length()).map { arr.getJSONObject(it) }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "web_sms_batch: failed to parse inline messages, fetching from server")
-                        fetchPendingMessages(jobId)
-                    }
-                } else {
-                    fetchPendingMessages(jobId)
-                }
-
-                if (pendingMessages.isEmpty()) {
-                    Log.w(TAG, "web_sms_batch: no pending messages for jobId=$jobId")
-                    return@launch
-                }
-
-                Log.d(TAG, "web_sms_batch: fetched ${pendingMessages.size} pending messages")
-
-                val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    applicationContext.getSystemService(SmsManager::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    SmsManager.getDefault()
-                }
-
-                // Step 2: Send each message with 3-second delay
-                for ((index, msg) in pendingMessages.withIndex()) {
-                    val msgId = msg.getString("id")
-                    val phone = msg.getString("phone")
-                    val body = msg.getString("message")
-
-                    if (phone.isBlank() || body.isBlank()) {
-                        Log.w(TAG, "web_sms_batch: skipping message $msgId - empty phone or body")
-                        reportSmsStatus(msgId, "failed", "Empty phone number or message body")
-                        continue
-                    }
-
-                    // Add delay between messages (skip delay for the first one)
-                    if (index > 0) {
-                        delay(SMS_SEND_DELAY_MS)
-                    }
-
-                    try {
-                        // Split long messages and send
-                        val parts = smsManager.divideMessage(body)
-                        if (parts.size == 1) {
-                            smsManager.sendTextMessage(phone, null, body, null, null)
-                        } else {
-                            smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
-                        }
-
-                        Log.d(TAG, "web_sms_batch: sent SMS ${index + 1}/${pendingMessages.size} to $phone (id=$msgId)")
-                        try { reportSmsStatus(msgId, "sent", null) } catch (_: Exception) { Log.w(TAG, "Status report failed for $msgId (sent)") }
-                    } catch (e: Exception) {
-                        val errorMsg = e.message ?: "Unknown send error"
-                        Log.e(TAG, "web_sms_batch: failed to send SMS to $phone (id=$msgId)", e)
-                        try { reportSmsStatus(msgId, "failed", errorMsg) } catch (_: Exception) { Log.w(TAG, "Status report failed for $msgId (failed)") }
-                    }
-                }
-
-                Log.d(TAG, "web_sms_batch: completed jobId=$jobId")
-            } catch (e: Exception) {
-                Log.e(TAG, "web_sms_batch: fatal error processing jobId=$jobId", e)
+        // 정책 준수: 2건 이상은 반드시 사용자가 푸시에서 [발송]을 눌러 승인해야 발송됨 (자동 게이트웨이 금지)
+        if (count >= 2) {
+            notificationUtil.showWebBatchApproval(jobId, count, messagesJson, allPending = false)
+        } else {
+            // 1건은 즉시 발송
+            scope.launch {
+                try { webSmsBatchSender.sendJob(jobId, messagesJson) }
+                catch (e: Exception) { Log.e(TAG, "web_sms_batch send failed", e) }
             }
         }
     }
 
-    /**
-     * Fetches pending SMS messages from server for a given job.
-     * GET /api/user/sms/pending?jobId={jobId}
-     * Uses TokenManager for automatic 401 retry with token refresh.
-     */
-    private fun fetchPendingMessages(jobId: String): List<JSONObject> {
-        val requestBuilder = Request.Builder()
-            .url("$SERVER_BASE_URL/api/user/sms/pending?jobId=$jobId")
-            .get()
-
-        val response = tokenManager.executeAuthenticated(requestBuilder)
-        return response.use { resp ->
-            if (!resp.isSuccessful) {
-                Log.e(TAG, "fetchPendingMessages: HTTP ${resp.code} for jobId=$jobId")
-                return emptyList()
-            }
-
-            val bodyStr = resp.body?.string()
-            if (bodyStr.isNullOrEmpty()) {
-                Log.e(TAG, "fetchPendingMessages: empty response body for jobId=$jobId")
-                return emptyList()
-            }
-
-            try {
-                val jsonArray = JSONArray(bodyStr)
-                val messages = mutableListOf<JSONObject>()
-                for (i in 0 until jsonArray.length()) {
-                    messages.add(jsonArray.getJSONObject(i))
-                }
-                messages
-            } catch (e: Exception) {
-                // Try parsing as object with "data" or "messages" key
-                try {
-                    val jsonObj = JSONObject(bodyStr)
-                    val jsonArray = if (jsonObj.has("data")) jsonObj.getJSONArray("data")
-                        else jsonObj.getJSONArray("messages")
-                    val messages = mutableListOf<JSONObject>()
-                    for (i in 0 until jsonArray.length()) {
-                        messages.add(jsonArray.getJSONObject(i))
-                    }
-                    messages
-                } catch (e2: Exception) {
-                    Log.e(TAG, "fetchPendingMessages: failed to parse response", e2)
-                    emptyList()
-                }
-            }
-        }
-    }
-
-    /**
-     * Reports SMS send status back to server.
-     * PUT /api/user/sms/{id}/status
-     * Uses TokenManager for automatic 401 retry with token refresh.
-     */
-    private fun reportSmsStatus(
-        messageId: String,
-        status: String,
-        error: String?
-    ) {
-        try {
-            val json = JSONObject().apply {
-                put("status", status)
-                if (error != null) {
-                    put("error", error)
-                }
-            }
-
-            val requestBody = json.toString()
-                .toRequestBody("application/json".toMediaType())
-
-            val requestBuilder = Request.Builder()
-                .url("$SERVER_BASE_URL/api/user/sms/$messageId/status")
-                .put(requestBody)
-
-            val response = tokenManager.executeAuthenticated(requestBuilder)
-            response.use { resp ->
-                if (!resp.isSuccessful) {
-                    Log.w(TAG, "reportSmsStatus: HTTP ${resp.code} for id=$messageId")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "reportSmsStatus: failed for id=$messageId", e)
-        }
-    }
 
     /**
      * Uploads FCM token to server for future push notifications.

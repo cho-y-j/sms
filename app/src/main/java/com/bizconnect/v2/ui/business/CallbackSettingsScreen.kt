@@ -1,8 +1,11 @@
 package com.bizconnect.v2.ui.business
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -25,8 +28,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -89,6 +94,28 @@ fun CallbackSettingsScreen(
         uri?.let { viewModel.setBusinessCardImage(it.toString()) }
     }
 
+    // 자동 콜백용 통화기록 권한: 사전 고지(prominent disclosure) → 권한 요청 → 기능 활성화
+    var showCallLogDisclosure by remember { mutableStateOf(false) }
+    val hasCallPermission = {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+    }
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) {
+            viewModel.toggleAutoCallback(true)
+            BatteryOptimization.createRequestIntent(context)?.let { batteryOptLauncher.launch(it) }
+        } else {
+            viewModel.toggleAutoCallback(false)
+            android.widget.Toast.makeText(
+                context,
+                "통화기록 권한이 있어야 통화 후 자동 콜백을 보낼 수 있어요",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
             snackbarHostState.showSnackbar("설정이 저장되었습니다")
@@ -119,6 +146,35 @@ fun CallbackSettingsScreen(
                     }
                 }
                 showTemplatePickerFor = null
+            }
+        )
+    }
+
+    // 통화기록 사용 사전 고지 (Google Play 정책: 제한 데이터 접근 전 명확한 고지 + 동의)
+    if (showCallLogDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showCallLogDisclosure = false },
+            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SamsungBlue) },
+            title = { Text("통화기록 사용 안내") },
+            text = {
+                Text(
+                    "‘자동 콜백’을 켜면 BizConnect가 방금 종료된 통화·부재중 전화의 전화번호를 " +
+                        "통화기록에서 읽어, 그 번호로 미리 설정한 회신 문자를 자동으로 보냅니다.\n\n" +
+                        "• 통화기록은 ‘회신할 번호 확인’ 용도로만, 기기 안에서만 사용합니다\n" +
+                        "• 서버 전송·광고·분석에 사용하지 않습니다\n" +
+                        "• 자동 콜백을 끄면 통화기록을 읽지 않습니다"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCallLogDisclosure = false
+                    callPermissionLauncher.launch(
+                        arrayOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE)
+                    )
+                }) { Text("동의하고 계속", color = SamsungBlue) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCallLogDisclosure = false }) { Text("취소") }
             }
         )
     }
@@ -174,11 +230,17 @@ fun CallbackSettingsScreen(
                     subtitle = "자동 응답 메시지 사용",
                     isChecked = state.autoCallbackEnabled,
                     onCheckedChange = { enabled ->
-                        viewModel.toggleAutoCallback(enabled)
-                        // 콜백을 켤 때 배터리 최적화 예외를 요청해 백그라운드 동작을 보장.
                         if (enabled) {
-                            BatteryOptimization.createRequestIntent(context)
-                                ?.let { batteryOptLauncher.launch(it) }
+                            // 통화기록 권한이 없으면 먼저 사전 고지 → 권한 요청 후 활성화
+                            if (hasCallPermission()) {
+                                viewModel.toggleAutoCallback(true)
+                                BatteryOptimization.createRequestIntent(context)
+                                    ?.let { batteryOptLauncher.launch(it) }
+                            } else {
+                                showCallLogDisclosure = true
+                            }
+                        } else {
+                            viewModel.toggleAutoCallback(false)
                         }
                     }
                 )
