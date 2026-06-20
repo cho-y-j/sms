@@ -1,10 +1,7 @@
 package com.bizconnect.v2.ui.settings
 
-import android.app.role.RoleManager
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
-import android.provider.Telephony
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -82,11 +79,16 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    val isDefaultSmsApp = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+    var isDefaultSmsApp by remember {
+        mutableStateOf(com.bizconnect.v2.util.DefaultSmsApp.isDefault(context))
+    }
 
     val roleRequestLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { }
+    ) {
+        // Reflect the new state immediately so the subtitle updates after the dialog.
+        isDefaultSmsApp = com.bizconnect.v2.util.DefaultSmsApp.isDefault(context)
+    }
 
     Scaffold(
         topBar = {
@@ -232,15 +234,8 @@ fun SettingsScreen(
                 subtitle = if (isDefaultSmsApp) "BizConnect (현재 기본앱)" else "기본앱으로 설정하기",
                 onClick = {
                     if (!isDefaultSmsApp) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            val roleManager = context.getSystemService(RoleManager::class.java)
-                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
-                            roleRequestLauncher.launch(intent)
-                        } else {
-                            val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-                            intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
-                            roleRequestLauncher.launch(intent)
-                        }
+                        com.bizconnect.v2.util.DefaultSmsApp.createRequestIntent(context)
+                            ?.let { roleRequestLauncher.launch(it) }
                     }
                 }
             )

@@ -3,6 +3,7 @@ package com.bizconnect.v2.data.remote
 import android.content.Context
 import android.provider.Settings
 import android.util.Log
+import com.bizconnect.v2.BuildConfig
 import com.bizconnect.v2.data.preferences.AppPreferences
 import com.bizconnect.v2.data.remote.api.BizConnectApi
 import com.bizconnect.v2.data.remote.interceptor.AuthInterceptor
@@ -26,7 +27,6 @@ import javax.inject.Singleton
 object NetworkModule {
 
     private const val TAG = "NetworkModule"
-    private const val BASE_URL = "https://sm.on1.kr/"
     private const val CONNECT_TIMEOUT_SECONDS = 30L
     private const val READ_TIMEOUT_SECONDS = 30L
     private const val WRITE_TIMEOUT_SECONDS = 30L
@@ -50,9 +50,10 @@ object NetworkModule {
     @Singleton
     fun provideHttpLoggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor { message ->
-            Log.d(TAG, message)
+            if (BuildConfig.DEBUG) Log.d(TAG, message)
         }.apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
         }
     }
 
@@ -84,7 +85,7 @@ object NetworkModule {
     ): Retrofit {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BuildConfig.API_BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()

@@ -23,6 +23,10 @@ data class CallbackSettingEntity(
     val businessCardEnabled: Boolean = false,
     val businessCardImageUrl: String? = null,
     val throttleInterval: Int = 5000,
+    // 발송 방식: false=자동 발송, true=수동(통화 종료 후 알림으로 확인 뒤 발송)
+    val manualMode: Boolean = false,
+    // 자동발송 금지 번호 (콤마 구분, 정규화된 번호). 자동·수동 모드 모두에서 제외.
+    val blockedNumbers: String = "",
     val excludedCategoryIds: String = "",
     val onEndTemplateId: Long? = null,
     val onMissedTemplateId: Long? = null,

@@ -1,6 +1,7 @@
 package com.bizconnect.v2.receiver
 
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -136,7 +137,33 @@ class SmsReceiver : BroadcastReceiver() {
                         }
                     }
 
-                    // Then persist to DB (non-blocking for user experience)
+                    // Default SMS app contract: messages delivered via SMS_DELIVER are NOT
+                    // auto-stored by the system — the default app IS the authoritative store
+                    // and must write them to the system provider itself. Do this FIRST, then
+                    // mirror into Room carrying the returned _id so the ContentObserver dedups
+                    // (mirrors the send path in SmsSender: provider write → id → Room).
+                    var systemSmsId = 0L
+                    try {
+                        val smsUri = context.contentResolver.insert(
+                            Telephony.Sms.Inbox.CONTENT_URI,
+                            ContentValues().apply {
+                                put(Telephony.Sms.ADDRESS, address)
+                                put(Telephony.Sms.BODY, body)
+                                put(Telephony.Sms.DATE, timestamp)
+                                put(Telephony.Sms.DATE_SENT, timestamp)
+                                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
+                                put(Telephony.Sms.READ, 0)
+                                put(Telephony.Sms.SEEN, 0)
+                                put(Telephony.Sms.THREAD_ID, threadId)
+                            }
+                        )
+                        systemSmsId = smsUri?.lastPathSegment?.toLongOrNull() ?: 0L
+                    } catch (e: Exception) {
+                        // Throws if we are not (yet) the default SMS app — expected; the
+                        // user is prompted to set us as default. Room still holds the message.
+                        Log.w(TAG, "Could not write incoming SMS to system provider", e)
+                    }
+
                     val messageEntity = MessageEntity(
                         threadId = threadId,
                         address = address,
@@ -144,30 +171,10 @@ class SmsReceiver : BroadcastReceiver() {
                         timestamp = timestamp,
                         type = Telephony.Sms.MESSAGE_TYPE_INBOX,
                         read = false,
-                        seen = false
+                        seen = false,
+                        systemSmsId = systemSmsId
                     )
-                    val msgId = messageDao.insert(messageEntity)
-
-                    // Get the system SMS ID for dedup with ContentObserver
-                    try {
-                        val cursor = context.contentResolver.query(
-                            Uri.parse("content://sms/inbox"),
-                            arrayOf("_id"),
-                            "address = ? AND date >= ?",
-                            arrayOf(address, (timestamp - 1000).toString()),
-                            "_id DESC LIMIT 1"
-                        )
-                        cursor?.use {
-                            if (it.moveToFirst()) {
-                                val systemSmsId = it.getLong(0)
-                                if (systemSmsId > 0) {
-                                    messageDao.updateSystemSmsId(msgId, systemSmsId)
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Could not read system SMS ID", e)
-                    }
+                    messageDao.insert(messageEntity)
 
                     updateConversation(threadId, address, contactName, body, timestamp)
 

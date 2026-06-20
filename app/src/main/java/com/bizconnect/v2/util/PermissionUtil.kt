@@ -67,10 +67,6 @@ class PermissionUtil @Inject constructor(
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.READ_PHONE_NUMBERS)
-        }
-
         return permissions.toTypedArray()
     }
 }

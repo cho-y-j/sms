@@ -129,6 +129,11 @@ fun ConversationListScreen(
                     onSearchChange = { viewModel.search(it) }
                 )
 
+                // Prompt to become the default SMS app (auto-hides once we are default).
+                DefaultSmsAppBanner(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+
                 CategoryFilterChips(
                     categories = uiState.categories,
                     selectedCategoryId = uiState.selectedCategoryId,

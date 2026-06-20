@@ -5,10 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -89,34 +93,17 @@ fun BusinessHomeScreen(
         }
     }
 
+    // 핵심 2기능(콜백·자주쓰는 문자)은 아래에서 전폭 대형 카드로 따로 강조하고,
+    // 나머지는 보조 그리드로 둔다.
     val features = listOf(
-        BusinessFeature(
-            id = "message_templates",
-            title = "문자 관리",
-            subtitle = "템플릿 생성 및 관리",
-            icon = Icons.Default.Description,
-            color = androidx.compose.ui.graphics.Color(0xFF2196F3)
-        ),
-        BusinessFeature(
-            id = "bulk_send",
-            title = "대량 문자 발송",
-            subtitle = "여러 사람에게 한번에 전송",
-            icon = Icons.Default.Send,
-            color = MaterialTheme.colorScheme.primary
-        ),
+        // 대량 문자 발송: Google Play SMS 정책(대량/마케팅 발송 금지) 거절 트리거이므로
+        // 공개 빌드의 홈 메뉴에서 숨김. 라우트/화면 코드는 보존(추후 별도 배포용).
         BusinessFeature(
             id = "scheduled",
             title = "예약 발송",
             subtitle = "시간을 정해 자동 전송",
             icon = Icons.Default.Schedule,
             color = androidx.compose.ui.graphics.Color(0xFF6C5CE7)
-        ),
-        BusinessFeature(
-            id = "callback",
-            title = "콜백 설정",
-            subtitle = "전화 상황별 자동응답",
-            icon = Icons.Default.PhoneCallback,
-            color = androidx.compose.ui.graphics.Color(0xFF00B894)
         ),
         BusinessFeature(
             id = "customers",
@@ -209,6 +196,27 @@ fun BusinessHomeScreen(
                 )
             }
 
+            // 핵심① 통화 후 자동 문자 (콜백)
+            item(span = { GridItemSpan(2) }) {
+                HeroFeatureCard(
+                    title = "통화 후 자동 문자",
+                    subtitle = "못 받은 전화에 명함·인사를 자동으로 보내드려요",
+                    icon = Icons.Default.PhoneCallback,
+                    color = androidx.compose.ui.graphics.Color(0xFF00B894),
+                    onClick = onCallbackSettingsClick
+                )
+            }
+            // 핵심② 자주 쓰는 문자 (템플릿)
+            item(span = { GridItemSpan(2) }) {
+                HeroFeatureCard(
+                    title = "자주 쓰는 문자",
+                    subtitle = "서류·인사말을 저장해두고 한 번에 빠르게 보내기",
+                    icon = Icons.Default.Description,
+                    color = androidx.compose.ui.graphics.Color(0xFF2196F3),
+                    onClick = onMessageTemplateClick
+                )
+            }
+
             items(features.size) { index ->
                 val feature = features[index]
                 BusinessFeatureCard(
@@ -283,6 +291,56 @@ fun BusinessFeatureCard(
             Text(
                 text = feature.subtitle,
                 style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 핵심 기능(콜백·자주쓰는 문자)용 전폭 대형 카드. 보조 기능 카드보다 크고 글자도 큼.
+ */
+@Composable
+fun HeroFeatureCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    color: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .background(color.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = color,
+                modifier = Modifier.size(34.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

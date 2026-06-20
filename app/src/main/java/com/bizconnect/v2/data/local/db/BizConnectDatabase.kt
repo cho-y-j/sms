@@ -35,7 +35,7 @@ import com.bizconnect.v2.data.local.db.dao.*
         MessageTemplateEntity::class,
         AiUsageEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class BizConnectDatabase : RoomDatabase() {

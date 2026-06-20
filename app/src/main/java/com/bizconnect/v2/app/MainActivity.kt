@@ -1,6 +1,5 @@
 package com.bizconnect.v2.app
 
-import android.app.role.RoleManager
 import android.content.Intent
 import android.database.ContentObserver
 import android.net.Uri
@@ -8,8 +7,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.PowerManager
-import android.provider.Settings
 import android.provider.Telephony
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -78,6 +75,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         checkDefaultSmsApp()
+        promptDefaultSmsAppOnFirstLaunch()
         registerMmsContentObserver()
         uploadFcmTokenOnStart()
         fetchConfigOnStart()
@@ -127,18 +125,6 @@ class MainActivity : ComponentActivity() {
 
     private fun checkDefaultSmsApp() {
         isDefaultSmsApp = Telephony.Sms.getDefaultSmsPackage(this) == packageName
-    }
-
-    private fun requestBatteryOptimizationExemption() {
-        val powerManager = getSystemService(PowerManager::class.java)
-        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:$packageName")
-            }
-            try {
-                startActivity(intent)
-            } catch (_: Exception) { }
-        }
     }
 
     /**
@@ -240,11 +226,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun uploadFcmTokenOnStart() {
-        android.util.Log.d("FCM_UPLOAD", "=== uploadFcmTokenOnStart called ===")
         val accessToken = appPreferences.getAccessToken()
-        android.util.Log.d("FCM_UPLOAD", "accessToken: ${accessToken?.take(20) ?: "NULL"}")
         if (accessToken.isNullOrBlank() || accessToken.startsWith("offline_")) {
-            android.util.Log.d("FCM_UPLOAD", "No valid token, skipping FCM upload")
             return
         }
 
@@ -256,7 +239,6 @@ class MainActivity : ComponentActivity() {
                         return@addOnCompleteListener
                     }
                     val fcmToken = task.result
-                    android.util.Log.d("FCM_UPLOAD", "FCM token obtained: ${fcmToken?.take(20)}...")
 
                     if (fcmToken.isNullOrBlank()) return@addOnCompleteListener
 
@@ -484,16 +466,24 @@ class MainActivity : ComponentActivity() {
     }
 
     fun requestDefaultSmsApp() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(RoleManager::class.java)
-            if (roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
-                val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
-                defaultSmsLauncher.launch(intent)
-            }
-        } else {
-            val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-            intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
+        val intent = com.bizconnect.v2.util.DefaultSmsApp.createRequestIntent(this) ?: return
+        try {
             defaultSmsLauncher.launch(intent)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to launch default SMS request", e)
         }
+    }
+
+    /**
+     * On the very first launch, proactively ask the user to set BizConnect as the
+     * default SMS app — the core callback feature and Google Play's SMS policy both
+     * require it. Shown once; afterwards the conversation-list banner re-prompts
+     * non-intrusively while the app is not default.
+     */
+    private fun promptDefaultSmsAppOnFirstLaunch() {
+        if (isDefaultSmsApp) return
+        if (appPreferences.wasDefaultSmsPrompted()) return
+        appPreferences.setDefaultSmsPrompted(true)
+        requestDefaultSmsApp()
     }
 }

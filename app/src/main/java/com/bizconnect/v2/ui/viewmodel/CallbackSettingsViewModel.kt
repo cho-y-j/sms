@@ -1,5 +1,7 @@
 package com.bizconnect.v2.ui.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bizconnect.v2.data.local.db.dao.CallbackSettingDao
@@ -8,15 +10,20 @@ import com.bizconnect.v2.data.local.db.entity.CallbackSettingEntity
 import com.bizconnect.v2.data.local.db.entity.CategoryEntity
 import com.bizconnect.v2.data.preferences.AppPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
 class CallbackSettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val callbackSettingDao: CallbackSettingDao,
     private val appPreferences: AppPreferences,
     private val categoryDao: CategoryDao
@@ -42,6 +49,10 @@ class CallbackSettingsViewModel @Inject constructor(
         val businessCardEnabled: Boolean = false,
         val businessCardImageUrl: String? = null,
         val throttleInterval: Int = 5,
+        // 발송 방식: false=자동, true=수동(확인 후 발송)
+        val manualMode: Boolean = false,
+        // 자동발송 금지 번호 목록
+        val blockedNumbers: List<String> = emptyList(),
         val excludedCategoryIds: Set<Long> = emptySet(),
         val categories: List<CategoryEntity> = emptyList(),
         val isLoading: Boolean = true,
@@ -87,6 +98,9 @@ class CallbackSettingsViewModel @Inject constructor(
                         businessCardEnabled = setting.businessCardEnabled,
                         businessCardImageUrl = setting.businessCardImageUrl,
                         throttleInterval = setting.throttleInterval / 60000, // ms to minutes
+                        manualMode = setting.manualMode,
+                        blockedNumbers = setting.blockedNumbers
+                            .split(",").map { it.trim() }.filter { it.isNotEmpty() },
                         excludedCategoryIds = excludedIds,
                         isLoading = false
                     )
@@ -175,13 +189,50 @@ class CallbackSettingsViewModel @Inject constructor(
     }
 
     fun setBusinessCardImage(uri: String?) {
-        _uiState.update { it.copy(businessCardImageUrl = uri) }
-        autoSave()
+        if (uri == null) {
+            _uiState.update { it.copy(businessCardImageUrl = null) }
+            autoSave()
+            return
+        }
+        // Picker (GetContent) URIs are transient — readable only by this Activity
+        // instance. The callback fires later in a different process, so copy the
+        // image into app-internal storage now and persist that stable file path.
+        viewModelScope.launch {
+            val stablePath = withContext(Dispatchers.IO) { copyBusinessCardToInternal(uri) }
+            _uiState.update { it.copy(businessCardImageUrl = stablePath ?: uri) }
+            saveSettings()
+        }
+    }
+
+    private fun copyBusinessCardToInternal(uriString: String): String? {
+        return try {
+            val dir = File(context.filesDir, "business_card").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() } // keep only the latest card
+            val file = File(dir, "card_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(Uri.parse(uriString))?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+            file.absolutePath
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun updateThrottleInterval(minutes: Int) {
         val clamped = minutes.coerceIn(1, 60)
         _uiState.update { it.copy(throttleInterval = clamped) }
+        autoSave()
+    }
+
+    /** 발송 방식 전환: true=수동(확인 후 발송), false=자동 */
+    fun setManualMode(manual: Boolean) {
+        _uiState.update { it.copy(manualMode = manual) }
+        autoSave()
+    }
+
+    /** 자동발송 금지 번호 제거 */
+    fun removeBlockedNumber(number: String) {
+        _uiState.update { it.copy(blockedNumbers = it.blockedNumbers.filterNot { n -> n == number }) }
         autoSave()
     }
 
@@ -232,6 +283,8 @@ class CallbackSettingsViewModel @Inject constructor(
                 businessCardEnabled = state.businessCardEnabled,
                 businessCardImageUrl = state.businessCardImageUrl,
                 throttleInterval = state.throttleInterval * 60000, // minutes to ms
+                manualMode = state.manualMode,
+                blockedNumbers = state.blockedNumbers.joinToString(","),
                 excludedCategoryIds = excludedIdsStr,
                 updatedAt = System.currentTimeMillis()
             )

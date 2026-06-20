@@ -11,6 +11,7 @@ import android.provider.CalendarContract
 import com.bizconnect.v2.R
 import com.bizconnect.v2.app.MainActivity
 import com.bizconnect.v2.domain.ai.AiAssistant
+import com.bizconnect.v2.receiver.CallbackActionReceiver
 import com.bizconnect.v2.receiver.NotificationQuickReplyReceiver
 import com.bizconnect.v2.receiver.NotificationReplyReceiver
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -103,6 +104,63 @@ class NotificationUtil @Inject constructor(
 
     fun cancelNotification(threadId: Long) {
         notificationManager.cancel(threadId.toInt())
+    }
+
+    /**
+     * Manual-mode callback confirmation. Shown after a call ends when the user has
+     * chosen "수동(확인 후 발송)". Buttons: [보내기] sends the prepared callback now,
+     * [자동발송 금지] adds the number to the do-not-send list. (Replaces the idea of
+     * auto-launching a full-screen Activity, which Android blocks from the background.)
+     */
+    fun showCallbackConfirmNotification(
+        phoneNumber: String,
+        displayName: String,
+        body: String,
+        eventTypeName: String,
+        hasImage: Boolean
+    ) {
+        val notifId = CALLBACK_CONFIRM_BASE_ID + (phoneNumber.hashCode() and 0xFFFF)
+
+        val sendIntent = Intent(context, CallbackActionReceiver::class.java).apply {
+            action = CallbackActionReceiver.ACTION_SEND
+            putExtra(CallbackActionReceiver.EXTRA_PHONE, phoneNumber)
+            putExtra(CallbackActionReceiver.EXTRA_EVENT_TYPE, eventTypeName)
+            putExtra(CallbackActionReceiver.EXTRA_NOTIF_ID, notifId)
+        }
+        val sendPending = PendingIntent.getBroadcast(
+            context, notifId, sendIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val blockIntent = Intent(context, CallbackActionReceiver::class.java).apply {
+            action = CallbackActionReceiver.ACTION_BLOCK
+            putExtra(CallbackActionReceiver.EXTRA_PHONE, phoneNumber)
+            putExtra(CallbackActionReceiver.EXTRA_NOTIF_ID, notifId)
+        }
+        val blockPending = PendingIntent.getBroadcast(
+            context, notifId + 1, blockIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val preview = if (hasImage) "[명함] $body" else body
+
+        val notification = NotificationCompat.Builder(context, "messages")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("${displayName}님께 콜백 보낼까요?")
+            .setContentText(preview)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(preview))
+            .addAction(R.drawable.ic_notification, "보내기", sendPending)
+            .addAction(0, "자동발송 금지", blockPending)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .build()
+
+        notificationManager.notify(notifId, notification)
+    }
+
+    fun cancelCallbackConfirm(notifId: Int) {
+        notificationManager.cancel(notifId)
     }
 
     fun showApprovalNotification(messageId: String, messageText: String) {
@@ -248,5 +306,6 @@ class NotificationUtil @Inject constructor(
     companion object {
         const val SEND_RESULT_NOTIFICATION_ID = 200
         const val APPOINTMENT_NOTIFICATION_ID = 300
+        const val CALLBACK_CONFIRM_BASE_ID = 400000
     }
 }

@@ -12,6 +12,7 @@ import com.bizconnect.v2.data.local.db.dao.MessageTemplateDao
 import com.bizconnect.v2.data.local.db.dao.SmsLogDao
 import com.bizconnect.v2.data.local.db.entity.SmsLogEntity
 import com.bizconnect.v2.data.preferences.AppPreferences
+import com.bizconnect.v2.util.NotificationUtil
 import com.bizconnect.v2.util.PhoneNumberUtil
 import com.bizconnect.v2.util.SmsSender
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -47,7 +48,8 @@ class CallbackEngine @Inject constructor(
     private val messageTemplateDao: MessageTemplateDao,
     private val smsLogDao: SmsLogDao,
     private val appPreferences: AppPreferences,
-    private val phoneNumberUtil: PhoneNumberUtil
+    private val phoneNumberUtil: PhoneNumberUtil,
+    private val notificationUtil: NotificationUtil
 ) {
     companion object {
         private const val TAG = "CallbackEngine"
@@ -147,7 +149,27 @@ class CallbackEngine @Inject constructor(
                     setting = callbackSetting
                 )
 
-                // Send callback
+                // 수동 모드: 자동 발송하지 않고, 통화 종료 후 [보내기]/[자동발송 금지]
+                // 버튼이 달린 확인 알림만 띄운다. 실제 발송은 사용자가 [보내기]를 누를 때.
+                if (callbackSetting.manualMode) {
+                    notificationUtil.showCallbackConfirmNotification(
+                        phoneNumber = event.phoneNumber,
+                        displayName = callbackMessage.contactName ?: event.phoneNumber,
+                        body = callbackMessage.body,
+                        eventTypeName = event.type.name,
+                        hasImage = callbackMessage.imageUri != null
+                    )
+                    Log.d(TAG, "Manual mode: callback confirmation shown for ${event.phoneNumber}")
+                    return@withContext CallbackResult(
+                        success = false,
+                        eventType = event.type,
+                        phoneNumber = event.phoneNumber,
+                        message = callbackMessage.body,
+                        error = "manual_pending"
+                    )
+                }
+
+                // 자동 모드: 즉시 발송
                 val sendResult = sendCallback(callbackMessage)
 
                 // Log callback
@@ -174,6 +196,56 @@ class CallbackEngine @Inject constructor(
     }
 
     /**
+     * Send the callback immediately, bypassing the auto/manual decision.
+     * Invoked when the user taps [보내기] on the manual-mode confirmation notification.
+     */
+    suspend fun sendCallbackNow(phoneNumber: String, eventType: CallbackEventType): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val userId = appPreferences.getUserId() ?: "default"
+                val setting = callbackSettingDao.getSync(userId) ?: return@withContext false
+                val message = buildCallbackMessage(eventType, phoneNumber, setting)
+                val result = sendCallback(message)
+                logCallback(eventType, phoneNumber, result)
+                result.success
+            } catch (e: Exception) {
+                Log.e(TAG, "sendCallbackNow failed for $phoneNumber", e)
+                false
+            }
+        }
+    }
+
+    /**
+     * Add a number to the do-not-auto-send list (자동발송 금지).
+     * Invoked from the manual-mode notification [자동발송 금지] action or settings UI.
+     */
+    suspend fun addBlockedNumber(phoneNumber: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val userId = appPreferences.getUserId() ?: "default"
+                val setting = callbackSettingDao.getSync(userId) ?: return@withContext
+                val normalized = phoneNumberUtil.normalizeNumber(phoneNumber)
+                val current = setting.blockedNumbers
+                    .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    .toMutableSet()
+                if (current.add(normalized)) {
+                    callbackSettingDao.updateBlockedNumbers(userId, current.joinToString(","))
+                    Log.d(TAG, "Added $normalized to do-not-send list")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "addBlockedNumber failed for $phoneNumber", e)
+            }
+        }
+    }
+
+    private fun isNumberBlocked(normalizedNumber: String, blockedCsv: String): Boolean {
+        if (blockedCsv.isBlank()) return false
+        return blockedCsv.split(",")
+            .map { it.trim() }
+            .any { it.isNotEmpty() && it == normalizedNumber }
+    }
+
+    /**
      * Check if callback should be sent for this contact/group
      */
     private suspend fun shouldSendCallback(
@@ -182,6 +254,14 @@ class CallbackEngine @Inject constructor(
     ): Boolean {
         return try {
             val normalizedNumber = phoneNumberUtil.normalizeNumber(phoneNumber)
+
+            // 자동발송 금지 번호 — 자동·수동 모드 모두에서 콜백 자체를 건너뜀
+            val blockSettings = callbackSettingDao.getSync(userId)
+            if (blockSettings != null && isNumberBlocked(normalizedNumber, blockSettings.blockedNumbers)) {
+                Log.d(TAG, "Callback skipped: $normalizedNumber is in the do-not-send list")
+                return false
+            }
+
             val customer = customerDao.getByPhone(normalizedNumber)
 
             // If customer exists, check if callback is enabled for them
@@ -291,7 +371,8 @@ class CallbackEngine @Inject constructor(
                     body = messageBody,
                     imageUri = imageUri,
                     isMms = isMms,
-                    eventType = eventType
+                    eventType = eventType,
+                    contactName = contactName
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Error building callback message", e)
@@ -418,7 +499,8 @@ data class CallbackMessage(
     val body: String,
     val imageUri: Uri?,
     val isMms: Boolean,
-    val eventType: CallbackEventType
+    val eventType: CallbackEventType,
+    val contactName: String? = null
 )
 
 data class CallbackResult(

@@ -73,7 +73,7 @@ class BizConnectFcmService : FirebaseMessagingService() {
      */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "FCM token refreshed: ${token.take(20)}...")
+        Log.d(TAG, "FCM token refreshed")
 
         scope.launch {
             try {

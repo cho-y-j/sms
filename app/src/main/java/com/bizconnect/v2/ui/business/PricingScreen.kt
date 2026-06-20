@@ -104,7 +104,7 @@ fun PricingScreen(
             // Free plan
             PlanCard(
                 planName = "무료",
-                description = "50건/일, 기본 기능",
+                description = "하루 50건 · 콜백·서류 템플릿 체험",
                 price = null,
                 isSelected = selectedPlan == "free",
                 isCurrent = currentTier == "free",
@@ -115,7 +115,7 @@ fun PricingScreen(
             // Paid plan
             PlanCard(
                 planName = "유료 (Business)",
-                description = "149건/일, 모든 기능",
+                description = "통화 후 명함 자동회신 · 서류 템플릿 무제한 · 하루 약 150건",
                 price = "₩4,900/월",
                 isSelected = selectedPlan == "paid",
                 isCurrent = currentTier == "paid",
@@ -126,7 +126,7 @@ fun PricingScreen(
             // Premium plan
             PlanCard(
                 planName = "프리미엄 (Premium)",
-                description = "149건/일, API/웹훅, 우선지원",
+                description = "비즈니스 혜택 전부 · 우선 지원 · 외부 연동(개발자용)",
                 price = "₩9,900/월",
                 isSelected = selectedPlan == "premium",
                 isCurrent = currentTier == "premium",
@@ -196,6 +196,15 @@ fun PricingScreen(
             ) {
                 Text("구독하기", fontWeight = FontWeight.Bold, color = Color.White)
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            // 결제 신뢰 정보 (자동결제·해지·환불) — 정기결제 고지는 전자상거래법상 필수
+            Text(
+                text = "매월 자동 결제되며 언제든지 해지할 수 있어요. 판매자 (주)다인온 · 결제 전 청구되지 않습니다.",
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
             HorizontalDivider()
@@ -367,7 +376,8 @@ private fun PlanCard(
             }
             Text(
                 text = description,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -375,7 +385,7 @@ private fun PlanCard(
             Text(
                 text = price,
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 color = SamsungBlue
             )
         }

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,6 +10,14 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun signingProp(key: String): String? =
+    keystoreProperties.getProperty(key) ?: System.getenv(key)
+
 android {
     namespace = "com.bizconnect.v2"
     compileSdk = 35
@@ -16,38 +26,45 @@ android {
         applicationId = "com.bizconnect.v2"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.1.0"
+        versionCode = 3
+        versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
-        buildConfigField("String", "API_BASE_URL", "\"https://api.bizconnect.com/\"")
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("../bizconnect-release.jks")
-            storePassword = "Cho2239148"
-            keyAlias = "bizconnect"
-            keyPassword = "Cho2239148"
+            val storeFilePath = signingProp("RELEASE_STORE_FILE") ?: "../bizconnect-release.jks"
+            val sf = rootProject.file(storeFilePath)
+            if (sf.exists()) {
+                storeFile = sf
+                storePassword = signingProp("RELEASE_STORE_PASSWORD")
+                keyAlias = signingProp("RELEASE_KEY_ALIAS") ?: "bizconnect"
+                keyPassword = signingProp("RELEASE_KEY_PASSWORD")
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("release")
+            isShrinkResources = true
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile?.exists() == true) {
+                signingConfig = releaseSigning
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            buildConfigField("String", "API_BASE_URL", "\"https://api.bizconnect.com/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://sm.on1.kr/\"")
         }
         debug {
             isMinifyEnabled = false
-            buildConfigField("String", "API_BASE_URL", "\"http://localhost:8080/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://sm.on1.kr/\"")
         }
     }
 

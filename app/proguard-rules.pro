@@ -59,3 +59,18 @@
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# Strip non-essential log calls from release builds.
+# Log.e (errors) and Log.wtf are kept so crashes/severe issues remain debuggable.
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+    public static boolean isLoggable(java.lang.String, int);
+}
+
+# Also strip Kotlin stdlib println if accidentally used for debugging.
+-assumenosideeffects class java.io.PrintStream {
+    public *** println(...);
+    public *** print(...);
+}

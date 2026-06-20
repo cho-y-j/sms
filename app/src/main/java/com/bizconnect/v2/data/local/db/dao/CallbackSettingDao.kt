@@ -47,6 +47,12 @@ interface CallbackSettingDao {
     @Query("UPDATE callback_settings SET throttleInterval = :interval WHERE userId = :userId")
     suspend fun updateThrottleInterval(userId: String, interval: Int)
 
+    @Query("UPDATE callback_settings SET manualMode = :manual WHERE userId = :userId")
+    suspend fun updateManualMode(userId: String, manual: Boolean)
+
+    @Query("UPDATE callback_settings SET blockedNumbers = :blocked WHERE userId = :userId")
+    suspend fun updateBlockedNumbers(userId: String, blocked: String)
+
     @Query("UPDATE callback_settings SET updatedAt = :timestamp WHERE userId = :userId")
     suspend fun updateTimestamp(userId: String, timestamp: Long)
 

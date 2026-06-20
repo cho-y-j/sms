@@ -61,6 +61,9 @@ class AppPreferences @Inject constructor(
         // SMS Sync consent
         private val KEY_SMS_SYNC_CONSENTED = booleanPreferencesKey("sms_sync_consented")
 
+        // Default-SMS-app onboarding (one-time first-launch prompt)
+        private val KEY_DEFAULT_SMS_PROMPTED = booleanPreferencesKey("default_sms_prompted")
+
         // Engine keys
         private val KEY_QUEUE_THROTTLE_MS = longPreferencesKey("queue_throttle_ms")
         private val KEY_LIMIT_MODE = stringPreferencesKey("limit_mode")
@@ -296,4 +299,10 @@ class AppPreferences @Inject constructor(
     fun isSmsSyncConsented(): Boolean = readSync(KEY_SMS_SYNC_CONSENTED, false)
 
     fun setSmsSyncConsented(consented: Boolean) = writeSync(KEY_SMS_SYNC_CONSENTED, consented)
+
+    // --- Default-SMS-app onboarding ---
+
+    fun wasDefaultSmsPrompted(): Boolean = readSync(KEY_DEFAULT_SMS_PROMPTED, false)
+
+    fun setDefaultSmsPrompted(prompted: Boolean) = writeSync(KEY_DEFAULT_SMS_PROMPTED, prompted)
 }

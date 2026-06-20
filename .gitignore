@@ -23,19 +23,38 @@ server/.gradle/
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 
-# Secrets
-*.jks
-*.keystore
-google-services.json
-
 # Docker
 postgres_data/
 
-# Secrets
-.env
+# Secrets - Signing
+*.jks
+*.keystore
+*.p12
+keystore.properties
+secrets.properties
+
+# Secrets - Certificates
 *.pem
+*.crt
+*.cer
+*.key
+
+# Secrets - Service accounts / API keys
+.env
+.env.*
+google-services.json
 firebase-service-account.json
-call-93289-firebase-adminsdk-*.json
+*-adminsdk-*.json
+*상용키*
+*API*상용*
+
+# Server scripts (contain secrets)
 sms_proxy.py
+s3_upload_proxy.py
 start_proxy.sh
-verify-server-key.pem
+
+# Backup / scratch
+*~
+*.bak
+*.swp
+* 복사본*

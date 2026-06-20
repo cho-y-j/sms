@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -52,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import com.bizconnect.v2.util.BatteryOptimization
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -69,6 +72,12 @@ fun CallbackSettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    // 콜백 신뢰성: 배터리 최적화 예외를 받아야 백그라운드에서 통화 후 콜백이 안 죽음.
+    val batteryOptLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { }
 
     // Template picker dialog state
     var showTemplatePickerFor by remember { mutableStateOf<String?>(null) }
@@ -164,17 +173,50 @@ fun CallbackSettingsScreen(
                     title = "자동 콜백",
                     subtitle = "자동 응답 메시지 사용",
                     isChecked = state.autoCallbackEnabled,
-                    onCheckedChange = { viewModel.toggleAutoCallback(it) }
+                    onCheckedChange = { enabled ->
+                        viewModel.toggleAutoCallback(enabled)
+                        // 콜백을 켤 때 배터리 최적화 예외를 요청해 백그라운드 동작을 보장.
+                        if (enabled) {
+                            BatteryOptimization.createRequestIntent(context)
+                                ?.let { batteryOptLauncher.launch(it) }
+                        }
+                    }
                 )
 
                 if (state.autoCallbackEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 처음 설정 가이드 (3단계)
+                    InfoNote(
+                        text = "처음이세요? ① 보낼 메시지 입력 → ② 아래 '명함 이미지' 등록 → ③ 저장하면 끝!",
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // 백그라운드 동작 안내 (OEM 절전 정책 대응)
+                    InfoNote(
+                        text = "콜백이 안정적으로 동작하려면 배터리 최적화에서 'BizConnect'를 제외하고, " +
+                            "샤오미·오포·비보 등은 설정 > 앱 > 자동 시작을 허용해 주세요.",
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // === 발송 방식 (자동/수동) ===
+                    SettingToggleItem(
+                        title = "수동 발송 (확인 후 보내기)",
+                        subtitle = if (state.manualMode)
+                            "통화 종료 후 알림에서 [보내기]를 눌러야 발송됩니다"
+                        else
+                            "통화 종료 후 자동으로 즉시 발송됩니다",
+                        isChecked = state.manualMode,
+                        onCheckedChange = { viewModel.setManualMode(it) }
+                    )
+
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // === 통화 종료 후 ===
                     CallbackSectionHeader("통화 종료 후")
 
                     SettingToggleItem(
-                        title = "자동 응답 활성화",
+                        title = "통화 끝나면 보내기",
                         subtitle = "통화 종료 후 메시지 발송",
                         isChecked = state.onEndEnabled,
                         onCheckedChange = { viewModel.toggleOnEnd(it) }
@@ -197,7 +239,7 @@ fun CallbackSettingsScreen(
                     CallbackSectionHeader("부재중 전화")
 
                     SettingToggleItem(
-                        title = "자동 응답 활성화",
+                        title = "못 받은 전화에 보내기",
                         subtitle = "부재중 전화에 메시지 발송",
                         isChecked = state.onMissedEnabled,
                         onCheckedChange = { viewModel.toggleOnMissed(it) }
@@ -220,7 +262,7 @@ fun CallbackSettingsScreen(
                     CallbackSectionHeader("통화중 거절")
 
                     SettingToggleItem(
-                        title = "자동 응답 활성화",
+                        title = "거절한 전화에 보내기",
                         subtitle = "통화 중 거절 시 메시지 발송",
                         isChecked = state.onBusyEnabled,
                         onCheckedChange = { viewModel.toggleOnBusy(it) }
@@ -243,7 +285,7 @@ fun CallbackSettingsScreen(
                     CallbackSectionHeader("발신 통화 종료 후")
 
                     SettingToggleItem(
-                        title = "자동 응답 활성화",
+                        title = "내가 건 통화 후 보내기",
                         subtitle = "내가 전화 걸고 종료 시 메시지 발송",
                         isChecked = state.onOutgoingEnabled,
                         onCheckedChange = { viewModel.toggleOutgoing(it) }
@@ -285,7 +327,10 @@ fun CallbackSettingsScreen(
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 Image(
-                                    painter = rememberAsyncImagePainter(model = Uri.parse(imageUrl)),
+                                    painter = rememberAsyncImagePainter(
+                                        model = if (imageUrl.startsWith("/")) java.io.File(imageUrl)
+                                                else Uri.parse(imageUrl)
+                                    ),
                                     contentDescription = "명함 이미지",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Fit
@@ -362,6 +407,60 @@ fun CallbackSettingsScreen(
 
                     InfoNote(
                         text = "선택된 카테고리 연락처는 콜백이 발송되지 않습니다",
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // === 자동발송 금지 번호 ===
+                    CallbackSectionHeader("자동발송 금지 번호")
+
+                    if (state.blockedNumbers.isEmpty()) {
+                        Text(
+                            text = "금지된 번호가 없습니다. 통화 종료 알림에서 [자동발송 금지]를 누르면 여기에 추가됩니다.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.surface,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .padding(4.dp)
+                        ) {
+                            Column {
+                                state.blockedNumbers.forEach { number ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = number,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(onClick = { viewModel.removeBlockedNumber(number) }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "삭제",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    InfoNote(
+                        text = "이 목록의 번호에는 자동·수동 모두 콜백이 발송되지 않습니다",
                         modifier = Modifier.padding(top = 4.dp)
                     )
 
@@ -537,7 +636,8 @@ private fun MessageCostNote(message: String) {
 private fun InfoNote(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall,
+        // 노안 대응: 안내문구를 labelSmall(11sp) → bodyMedium(14sp)로 상향
+        style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(start = 4.dp)
     )
@@ -612,14 +712,15 @@ fun MessageEditBox(
             value = message,
             onValueChange = onMessageChange,
             modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodySmall.copy(
+            // 노안 대응: 콜백 회신 본문은 직접 읽고 고치는 핵심 텍스트 → bodyLarge(16sp)
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = MaterialTheme.colorScheme.onSurface
             ),
             decorationBox = { innerTextField ->
                 if (message.isEmpty()) {
                     Text(
                         text = placeholder,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

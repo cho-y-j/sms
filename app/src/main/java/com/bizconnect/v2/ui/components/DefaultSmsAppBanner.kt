@@ -1,9 +1,5 @@
 package com.bizconnect.v2.ui.components
 
-import android.app.role.RoleManager
-import android.content.Intent
-import android.os.Build
-import android.provider.Telephony
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -28,7 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,21 +31,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.bizconnect.v2.ui.theme.SamsungOrange
-import kotlinx.coroutines.launch
+import com.bizconnect.v2.util.DefaultSmsApp
 
 @Composable
 fun DefaultSmsAppBanner(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var showBanner by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
+    // Re-evaluated on each (re)composition and after the role request returns.
+    var isDefault by remember { mutableStateOf(DefaultSmsApp.isDefault(context)) }
+    var dismissed by remember { mutableStateOf(false) }
 
     val roleRequestLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { }
+    ) {
+        isDefault = DefaultSmsApp.isDefault(context)
+    }
 
-    if (!showBanner) return
+    // Never nag a user who is already the default app, or who dismissed it.
+    if (isDefault || dismissed) return
 
     Box(
         modifier = modifier
@@ -91,17 +90,7 @@ fun DefaultSmsAppBanner(
 
             Button(
                 onClick = {
-                    scope.launch {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            val roleManager = context.getSystemService(RoleManager::class.java)
-                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
-                            roleRequestLauncher.launch(intent)
-                        } else {
-                            val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-                            intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
-                            roleRequestLauncher.launch(intent)
-                        }
-                    }
+                    DefaultSmsApp.createRequestIntent(context)?.let { roleRequestLauncher.launch(it) }
                 },
                 modifier = Modifier.padding(end = 8.dp)
             ) {
@@ -109,7 +98,7 @@ fun DefaultSmsAppBanner(
             }
 
             IconButton(
-                onClick = { showBanner = false },
+                onClick = { dismissed = true },
                 modifier = Modifier.padding(0.dp)
             ) {
                 Icon(

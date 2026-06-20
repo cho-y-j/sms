@@ -7,18 +7,16 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- SMS Permissions -->
+    <!-- SMS Permissions (default SMS app) -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.WRITE_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
 
     <!-- Phone & Call Permissions -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
-    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
 
     <!-- Contact Permissions -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -52,6 +50,8 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:supportsRtl="true"
         android:theme="@style/Theme.BizConnect"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -143,6 +143,11 @@
         <!-- Notification Quick Reply Receiver -->
         <receiver
             android:name=".receiver.NotificationQuickReplyReceiver"
+            android:exported="false" />
+
+        <!-- Manual-mode Callback Action Receiver (보내기 / 자동발송 금지) -->
+        <receiver
+            android:name=".receiver.CallbackActionReceiver"
             android:exported="false" />
 
         <!-- SMS Delivery Status Receiver -->

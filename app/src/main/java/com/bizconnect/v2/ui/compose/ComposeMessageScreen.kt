@@ -6,6 +6,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,6 +79,9 @@ fun ComposeMessageScreen(
     viewModel: ComposeMessageViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // 자주 보내는 '서류' 템플릿(이미지 포함)을 1탭으로 첨부하기 위한 데이터
+    val templateVm: com.bizconnect.v2.ui.viewmodel.MessageTemplateViewModel = hiltViewModel()
+    val allTemplates by templateVm.templates.collectAsStateWithLifecycle()
 
     var showSearchDialog by remember { mutableStateOf(false) }
     var showPhoneDialog by remember { mutableStateOf(false) }
@@ -245,6 +250,43 @@ fun ComposeMessageScreen(
                 }
             }
 
+            // === 자주 보내는 서류 빠른 첨부 (1탭) ===
+            val docTemplates = allTemplates.filter { !it.imageUri.isNullOrBlank() }
+            if (docTemplates.isNotEmpty() && selectedImageUri == null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "자주 보내는 서류:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    docTemplates.forEach { t ->
+                        Text(
+                            text = t.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = SamsungBlue,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .background(SamsungBlue.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                                .clickable {
+                                    selectedImageUri = t.imageUri?.let { p ->
+                                        if (p.startsWith("/")) Uri.fromFile(java.io.File(p)) else Uri.parse(p)
+                                    }
+                                    if (t.content.isNotBlank()) viewModel.updateMessage(t.content)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+
             // === 하단 메시지 입력 + 첨부 + 전송 ===
             Row(
                 modifier = Modifier
@@ -271,12 +313,13 @@ fun ComposeMessageScreen(
                         value = uiState.messageText,
                         onValueChange = { viewModel.updateMessage(it) },
                         modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        // 노안 대응: 발송 본문은 bodyLarge(16sp)
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
                         decorationBox = { innerTextField ->
                             if (uiState.messageText.isEmpty()) {
-                                Text("메시지를 입력하세요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("메시지를 입력하세요", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             innerTextField()
                         }
@@ -285,18 +328,25 @@ fun ComposeMessageScreen(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
+                // 전송 버튼은 항상 보이게 두고(사라지면 '왜 안 보내지지?' 혼란),
+                // 보낼 수 없을 땐 비활성(회색)으로 표시.
                 val canSend = uiState.selectedRecipients.isNotEmpty() && (uiState.messageText.isNotEmpty() || selectedImageUri != null)
-                if (canSend) {
-                    IconButton(onClick = {
+                IconButton(
+                    enabled = canSend,
+                    onClick = {
                         if (selectedImageUri != null) {
                             viewModel.sendMmsWithImage(uiState.messageText, selectedImageUri ?: return@IconButton)
                             selectedImageUri = null
                         } else {
                             viewModel.sendMessage()
                         }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "전송", tint = SamsungBlue)
                     }
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "전송",
+                        tint = if (canSend) SamsungBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -405,6 +455,14 @@ END:VCARD
             onDismiss = { showTemplatePicker = false },
             onTemplateSelected = { template ->
                 viewModel.updateMessage(template.content)
+                // 서류(이미지) 템플릿이면 첨부 이미지도 함께 실어줘야 한다.
+                // (이게 빠져 있어서 사업자등록증·통장 같은 서류 템플릿이 텍스트만 발송되던 핵심 결함)
+                if (!template.imageUri.isNullOrBlank()) {
+                    selectedImageUri = if (template.imageUri!!.startsWith("/"))
+                        Uri.fromFile(java.io.File(template.imageUri!!))
+                    else
+                        Uri.parse(template.imageUri!!)
+                }
                 showTemplatePicker = false
             },
             onCreateNew = { /* 인라인 생성 폼이 다이얼로그 안에서 처리됨 */ }

@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.bizconnect.v2.service.CallbackService
 import com.bizconnect.v2.service.SyncService
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -16,12 +15,10 @@ class BootReceiver : BroadcastReceiver() {
         Log.d(TAG, "Boot completed, starting services")
 
         try {
-            // Restart scheduled services and alarms
+            // Restart scheduled services and alarms.
+            // Note: the auto-callback is driven at runtime by CallStateReceiver
+            // (PHONE_STATE); there is nothing call-related to start at boot.
             Intent(context, SyncService::class.java).apply {
-                context.startService(this)
-            }
-
-            Intent(context, CallbackService::class.java).apply {
                 context.startService(this)
             }
         } catch (e: Exception) {
